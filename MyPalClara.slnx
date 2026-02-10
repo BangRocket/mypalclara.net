@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Clara.Cli/Clara.Cli.csproj" />
+    <Project Path="src/Clara.Core/Clara.Core.csproj" />
+  </Folder>
+</Solution>
