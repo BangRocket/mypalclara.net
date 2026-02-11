@@ -13,6 +13,9 @@ public class ClaraDbContext : DbContext
     public DbSet<MemorySupersessionEntity> MemorySupersessions => Set<MemorySupersessionEntity>();
     public DbSet<CanonicalUserEntity> CanonicalUsers => Set<CanonicalUserEntity>();
     public DbSet<PlatformLinkEntity> PlatformLinks => Set<PlatformLinkEntity>();
+    public DbSet<ProjectEntity> Projects => Set<ProjectEntity>();
+    public DbSet<SessionEntity> Sessions => Set<SessionEntity>();
+    public DbSet<MessageEntity> Messages => Set<MessageEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -54,6 +57,30 @@ public class ClaraDbContext : DbContext
             e.HasOne(x => x.CanonicalUser!)
                 .WithMany(x => x.PlatformLinks)
                 .HasForeignKey(x => x.CanonicalUserId);
+        });
+
+        // Project
+        modelBuilder.Entity<ProjectEntity>(e =>
+        {
+            e.HasMany(x => x.Sessions)
+                .WithOne(x => x.Project)
+                .HasForeignKey(x => x.ProjectId);
+        });
+
+        // Session
+        modelBuilder.Entity<SessionEntity>(e =>
+        {
+            e.HasIndex(x => new { x.UserId, x.ContextId, x.ProjectId });
+            e.HasMany(x => x.Messages)
+                .WithOne(x => x.Session)
+                .HasForeignKey(x => x.SessionId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // Message
+        modelBuilder.Entity<MessageEntity>(e =>
+        {
+            e.HasIndex(x => new { x.SessionId, x.CreatedAt });
         });
     }
 }

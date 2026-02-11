@@ -1,3 +1,4 @@
+using Clara.Core.Chat;
 using Clara.Core.Configuration;
 using Clara.Core.Identity;
 using Clara.Core.Llm;
@@ -19,6 +20,7 @@ public sealed class ChatRepl
     private readonly PersonalityLoader _personality;
     private readonly MemoryService? _memory;
     private readonly UserIdentityService? _identity;
+    private readonly ChatHistoryService? _chatHistory;
     private readonly CommandDispatcher _commands;
     private readonly StreamingRenderer _renderer;
     private readonly IAnsiConsole _console;
@@ -49,7 +51,8 @@ public sealed class ChatRepl
         IAnsiConsole console,
         ILogger<ChatRepl> logger,
         MemoryService? memory = null,
-        UserIdentityService? identity = null)
+        UserIdentityService? identity = null,
+        ChatHistoryService? chatHistory = null)
     {
         _config = config;
         _orchestrator = orchestrator;
@@ -61,6 +64,7 @@ public sealed class ChatRepl
         _logger = logger;
         _memory = memory;
         _identity = identity;
+        _chatHistory = chatHistory;
     }
 
     public async Task RunAsync(CancellationToken ct = default)
@@ -80,6 +84,29 @@ public sealed class ChatRepl
         // Share resolved IDs with command dispatcher
         _commands.UserIds = _allUserIds;
 
+        // Restore session and chat history from DB
+        if (_chatHistory is not null)
+        {
+            try
+            {
+                var contextId = ChatHistoryService.BuildCliContextId(_config.UserId);
+                var sessionId = await _chatHistory.GetOrCreateSessionAsync(_config.UserId, contextId, ct);
+                if (sessionId is not null)
+                {
+                    var dbMessages = await _chatHistory.LoadRecentMessagesAsync(sessionId, ContextMessageCount, ct);
+                    if (dbMessages.Count > 0)
+                    {
+                        _history.AddRange(dbMessages);
+                        _logger.LogDebug("Loaded {Count} messages from session {SessionId}", dbMessages.Count, sessionId);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Chat history restore failed, continuing without history");
+            }
+        }
+
         ShowWelcome();
 
         while (!ct.IsCancellationRequested)
@@ -89,6 +116,19 @@ public sealed class ChatRepl
 
             if (input is null || input.Trim().ToLowerInvariant() is "exit" or "quit" or "bye")
             {
+                // Touch session activity on exit
+                if (_chatHistory?.CurrentSessionId is not null)
+                {
+                    try
+                    {
+                        await _chatHistory.UpdateSessionActivityAsync(_chatHistory.CurrentSessionId, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogDebug(ex, "Session activity update failed");
+                    }
+                }
+
                 // Finalize emotional context before exiting
                 if (_memory is not null)
                 {
@@ -218,6 +258,23 @@ public sealed class ChatRepl
         // Trim history
         while (_history.Count > ContextMessageCount * 2)
             _history.RemoveAt(0);
+
+        // Background: persist exchange to DB
+        if (_chatHistory?.CurrentSessionId is not null && !string.IsNullOrEmpty(fullText))
+        {
+            var sessionId = _chatHistory.CurrentSessionId;
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    await _chatHistory.StoreExchangeAsync(sessionId, _config.UserId, input, fullText, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Background chat history persist failed");
+                }
+            }, ct);
+        }
 
         // Background: memory add + promote used memories
         if (_memory is not null && !string.IsNullOrEmpty(fullText))

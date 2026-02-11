@@ -1,3 +1,4 @@
+using Clara.Core.Chat;
 using Clara.Core.Configuration;
 using Clara.Core.Mcp;
 using Clara.Core.Memory;
@@ -12,6 +13,7 @@ public sealed class CommandDispatcher
     private readonly McpServerManager _mcp;
     private readonly MemoryService? _memory;
     private readonly IGraphStore? _graphStore;
+    private readonly ChatHistoryService? _chatHistory;
     private readonly ClaraConfig _config;
     private readonly IAnsiConsole _console;
 
@@ -20,11 +22,13 @@ public sealed class CommandDispatcher
 
     public CommandDispatcher(
         McpServerManager mcp, ClaraConfig config, IAnsiConsole console,
-        MemoryService? memory = null, IGraphStore? graphStore = null)
+        MemoryService? memory = null, IGraphStore? graphStore = null,
+        ChatHistoryService? chatHistory = null)
     {
         _mcp = mcp;
         _memory = memory;
         _graphStore = graphStore;
+        _chatHistory = chatHistory;
         _config = config;
         _console = console;
         UserIds = [config.UserId];
@@ -59,6 +63,10 @@ public sealed class CommandDispatcher
                 HandleMemoryCommand(args).GetAwaiter().GetResult();
                 return true;
 
+            case "history":
+                HandleHistoryCommand().GetAwaiter().GetResult();
+                return true;
+
             case "status":
                 ShowStatus();
                 return true;
@@ -83,6 +91,7 @@ public sealed class CommandDispatcher
         table.AddRow("!mcp list", "List MCP servers");
         table.AddRow("!mcp status", "Show MCP server status");
         table.AddRow("!mcp tools [server]", "List tools (all or for a server)");
+        table.AddRow("!history", "Show recent sessions (cross-platform)");
         table.AddRow("!memory search <query>", "Search memories");
         table.AddRow("!memory key", "Show key memories");
         table.AddRow("!memory graph <query>", "Search graph relationships");
@@ -203,6 +212,37 @@ public sealed class CommandDispatcher
         table.AddColumn("Relationship");
         foreach (var r in results.Take(20))
             table.AddRow(r.EscapeMarkup());
+        _console.Write(table);
+    }
+
+    private async Task HandleHistoryCommand()
+    {
+        if (_chatHistory is null)
+        {
+            _console.MarkupLine("[yellow]Chat history not configured (check database settings).[/]");
+            return;
+        }
+
+        var sessions = await _chatHistory.GetUserSessionsAsync(UserIds);
+        if (sessions.Count == 0)
+        {
+            _console.MarkupLine("[dim]No sessions found.[/]");
+            return;
+        }
+
+        var table = new Table().BorderColor(Color.Grey).Title("Recent Sessions");
+        table.AddColumn("Context");
+        table.AddColumn("User");
+        table.AddColumn("Last Activity");
+        table.AddColumn("Archived");
+        foreach (var s in sessions)
+        {
+            table.AddRow(
+                s.ContextId.EscapeMarkup(),
+                s.UserId.EscapeMarkup(),
+                s.LastActivityAt.ToString("yyyy-MM-dd HH:mm"),
+                s.Archived == "true" ? "yes" : "no");
+        }
         _console.Write(table);
     }
 

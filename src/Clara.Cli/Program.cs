@@ -1,5 +1,6 @@
 using Clara.Cli;
 using Clara.Cli.Repl;
+using Clara.Core.Chat;
 using Clara.Core.Configuration;
 using Clara.Core.Data;
 using Clara.Core.Identity;
@@ -83,6 +84,7 @@ if (!string.IsNullOrEmpty(config.Database.Url))
     builder.Services.AddDbContextFactory<ClaraDbContext>(options =>
         options.UseNpgsql(config.Database.Url));
     builder.Services.AddSingleton<UserIdentityService>();
+    builder.Services.AddSingleton<ChatHistoryService>();
 }
 
 // --- FSRS / memory dynamics ---
