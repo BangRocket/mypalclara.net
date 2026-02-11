@@ -135,6 +135,9 @@ if (!string.IsNullOrEmpty(config.Database.Url))
         var dbFactory = host.Services.GetRequiredService<IDbContextFactory<ClaraDbContext>>();
         await using var db = await dbFactory.CreateDbContextAsync();
         await db.Database.EnsureCreatedAsync();
+        // Backfill NULL timestamps on projects (shared table with Python Clara)
+        await db.Database.ExecuteSqlRawAsync(
+            "UPDATE projects SET created_at = now(), updated_at = now() WHERE created_at IS NULL");
         console.MarkupLine("[dim]Database tables ensured.[/]");
     }
     catch (Exception ex)
