@@ -36,8 +36,8 @@ public class SessionEntity
     [Column("session_summary")]
     public string? SessionSummary { get; set; }
 
-    [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    [Column("started_at")]
+    public DateTime StartedAt { get; set; } = DateTime.UtcNow;
 
     [Column("last_activity_at")]
     public DateTime LastActivityAt { get; set; } = DateTime.UtcNow;
