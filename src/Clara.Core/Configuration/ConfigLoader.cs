@@ -60,6 +60,9 @@ public static class ConfigLoader
         config.Database.Url = NormalizePostgresUrl(config.Database.Url);
         config.Memory.VectorStore.DatabaseUrl = NormalizePostgresUrl(config.Memory.VectorStore.DatabaseUrl);
 
+        // Normalize Redis URIs (redis://...) to StackExchange.Redis configuration strings
+        config.Memory.RedisUrl = NormalizeRedisUrl(config.Memory.RedisUrl);
+
         return config;
     }
 
@@ -212,5 +215,52 @@ public static class ConfigLoader
         }
 
         return string.Join(";", parts);
+    }
+
+    /// <summary>
+    /// Converts a Redis URI (redis:// or rediss://) to a StackExchange.Redis configuration string.
+    /// StackExchange.Redis expects "host:port,password=...,defaultDatabase=..." format.
+    /// </summary>
+    internal static string NormalizeRedisUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+
+        // Already in config format (contains comma-separated options or no scheme)
+        if (!url.StartsWith("redis://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("rediss://", StringComparison.OrdinalIgnoreCase))
+            return url;
+
+        var tls = url.StartsWith("rediss://", StringComparison.OrdinalIgnoreCase);
+
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri))
+            return url;
+
+        var host = uri.Host;
+        var port = uri.Port > 0 ? uri.Port : 6379;
+        var parts = new List<string> { $"{host}:{port}" };
+
+        // Password from userinfo (redis://:password@host or redis://user:password@host)
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+        {
+            var creds = uri.UserInfo.Split(':', 2);
+            var password = creds.Length > 1
+                ? Uri.UnescapeDataString(creds[1])
+                : Uri.UnescapeDataString(creds[0]);
+            if (!string.IsNullOrEmpty(password))
+                parts.Add($"password={password}");
+        }
+
+        // Database number from path (redis://host:port/0)
+        if (uri.AbsolutePath.Length > 1)
+        {
+            var db = uri.AbsolutePath.TrimStart('/');
+            if (int.TryParse(db, out _))
+                parts.Add($"defaultDatabase={db}");
+        }
+
+        if (tls)
+            parts.Add("ssl=true");
+
+        return string.Join(",", parts);
     }
 }
