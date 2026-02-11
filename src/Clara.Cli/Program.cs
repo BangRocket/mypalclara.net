@@ -1,4 +1,5 @@
 using Clara.Cli;
+using Microsoft.Extensions.Configuration;
 using Clara.Cli.Repl;
 using Clara.Core.Chat;
 using Clara.Core.Configuration;
@@ -24,8 +25,17 @@ using Spectre.Console;
 
 var console = AnsiConsole.Console;
 
-// Build host with DI — appsettings.json is loaded automatically
-var builder = Host.CreateApplicationBuilder();
+// Build host with DI — explicit config layering: example defaults → user overrides → env vars → CLI args
+var builder = Host.CreateApplicationBuilder(args);
+builder.Configuration.Sources.Clear();
+builder.Configuration
+    .SetBasePath(AppContext.BaseDirectory)
+    .AddJsonFile("appsettings.example.json", optional: true, reloadOnChange: false)
+    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: false)
+    .AddJsonFile($"appsettings.{builder.Environment.EnvironmentName}.json", optional: true, reloadOnChange: false)
+    .AddEnvironmentVariables();
+if (args.Length > 0)
+    builder.Configuration.AddCommandLine(args);
 
 // Bind ClaraConfig from the host configuration (appsettings.json + env vars)
 ClaraConfig config;
@@ -74,13 +84,11 @@ builder.Services.AddHttpClient<EmbeddingClient>();
 builder.Services.AddSingleton<IVectorStore, PgVectorStore>();
 
 // --- EF Core (FSRS tables + identity) ---
-if (!string.IsNullOrEmpty(config.Database.Url))
-{
-    builder.Services.AddDbContextFactory<ClaraDbContext>(options =>
-        options.UseNpgsql(config.Database.Url));
-    builder.Services.AddSingleton<UserIdentityService>();
-    builder.Services.AddSingleton<ChatHistoryService>();
-}
+// Always register so DI resolution succeeds; connection errors surface at usage time if URL is empty.
+builder.Services.AddDbContextFactory<ClaraDbContext>(options =>
+    options.UseNpgsql(config.Database.Url));
+builder.Services.AddSingleton<UserIdentityService>();
+builder.Services.AddSingleton<ChatHistoryService>();
 
 // --- FSRS / memory dynamics ---
 builder.Services.AddSingleton<MemoryDynamicsService>();
