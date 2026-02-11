@@ -25,9 +25,8 @@ public static class ConfigLoader
         if (!string.IsNullOrEmpty(config.Mcp.ServersDir))
             config.Mcp.ServersDir = ResolvePath(baseDir, config.Mcp.ServersDir);
 
-        // Normalize PostgreSQL URIs (postgresql://...) to Npgsql key-value connection strings
+        // Normalize PostgreSQL URI to Npgsql key-value connection string
         config.Database.Url = NormalizePostgresUrl(config.Database.Url);
-        config.Memory.VectorStore.DatabaseUrl = NormalizePostgresUrl(config.Memory.VectorStore.DatabaseUrl);
 
         // Normalize Redis URIs (redis://...) to StackExchange.Redis configuration strings
         config.Memory.RedisUrl = NormalizeRedisUrl(config.Memory.RedisUrl);

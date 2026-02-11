@@ -28,6 +28,7 @@ public sealed class ChatRepl
 
     // Resolved linked user IDs (set once in RunAsync)
     private IReadOnlyList<string> _allUserIds = [];
+    private Guid? _userGuid;
 
     // Conversation history (last N messages)
     private const int ContextMessageCount = 15;
@@ -74,6 +75,7 @@ public sealed class ChatRepl
         {
             await _identity.EnsurePlatformLinkAsync(_config.UserId, linkTo: _config.LinkTo);
             _allUserIds = await _identity.ResolveAllUserIdsAsync(_config.UserId);
+            _userGuid = await _identity.ResolveUserGuidAsync(_config.UserId);
             _logger.LogDebug("Resolved {Count} linked user IDs for {UserId}", _allUserIds.Count, _config.UserId);
         }
         else
@@ -83,21 +85,27 @@ public sealed class ChatRepl
 
         // Share resolved IDs with command dispatcher
         _commands.UserIds = _allUserIds;
+        if (_userGuid.HasValue)
+            _commands.UserGuids = [_userGuid.Value];
 
-        // Restore session and chat history from DB
-        if (_chatHistory is not null)
+        // Restore conversation and chat history from DB
+        if (_chatHistory is not null && _userGuid.HasValue)
         {
             try
             {
-                var contextId = ChatHistoryService.BuildCliContextId(_config.UserId);
-                var sessionId = await _chatHistory.GetOrCreateSessionAsync(_config.UserId, contextId, ct);
-                if (sessionId is not null)
+                var channelResult = await _chatHistory.EnsureCliChannelAsync(_userGuid.Value, ct);
+                if (channelResult.HasValue)
                 {
-                    var dbMessages = await _chatHistory.LoadRecentMessagesAsync(sessionId, ContextMessageCount, ct);
-                    if (dbMessages.Count > 0)
+                    var (_, channelId) = channelResult.Value;
+                    var conversationId = await _chatHistory.GetOrCreateConversationAsync(channelId, _userGuid.Value, ct);
+                    if (conversationId.HasValue)
                     {
-                        _history.AddRange(dbMessages);
-                        _logger.LogDebug("Loaded {Count} messages from session {SessionId}", dbMessages.Count, sessionId);
+                        var dbMessages = await _chatHistory.LoadRecentMessagesAsync(conversationId.Value, ContextMessageCount, ct);
+                        if (dbMessages.Count > 0)
+                        {
+                            _history.AddRange(dbMessages);
+                            _logger.LogDebug("Loaded {Count} messages from conversation {ConversationId}", dbMessages.Count, conversationId);
+                        }
                     }
                 }
             }
@@ -116,19 +124,6 @@ public sealed class ChatRepl
 
             if (input is null || input.Trim().ToLowerInvariant() is "exit" or "quit" or "bye")
             {
-                // Touch session activity on exit
-                if (_chatHistory?.CurrentSessionId is not null)
-                {
-                    try
-                    {
-                        await _chatHistory.UpdateSessionActivityAsync(_chatHistory.CurrentSessionId, ct);
-                    }
-                    catch (Exception ex)
-                    {
-                        _logger.LogDebug(ex, "Session activity update failed");
-                    }
-                }
-
                 // Finalize emotional context before exiting
                 if (_memory is not null)
                 {
@@ -260,14 +255,14 @@ public sealed class ChatRepl
             _history.RemoveAt(0);
 
         // Background: persist exchange to DB
-        if (_chatHistory?.CurrentSessionId is not null && !string.IsNullOrEmpty(fullText))
+        if (_chatHistory?.CurrentConversationId is not null && !string.IsNullOrEmpty(fullText))
         {
-            var sessionId = _chatHistory.CurrentSessionId;
+            var conversationId = _chatHistory.CurrentConversationId.Value;
             _ = Task.Run(async () =>
             {
                 try
                 {
-                    await _chatHistory.StoreExchangeAsync(sessionId, _config.UserId, input, fullText, ct);
+                    await _chatHistory.StoreExchangeAsync(conversationId, _userGuid, input, fullText, ct);
                 }
                 catch (Exception ex)
                 {

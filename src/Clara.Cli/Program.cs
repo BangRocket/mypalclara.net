@@ -12,8 +12,6 @@ using Clara.Core.Memory.Cache;
 using Clara.Core.Memory.Context;
 using Clara.Core.Memory.Dynamics;
 using Clara.Core.Memory.Extraction;
-using Clara.Core.Memory.Graph;
-using Clara.Core.Memory.Vector;
 using Clara.Core.Orchestration;
 using Clara.Core.Personality;
 using Microsoft.EntityFrameworkCore;
@@ -80,15 +78,17 @@ builder.Services.AddSingleton<PersonalityLoader>();
 // --- Embedding client ---
 builder.Services.AddHttpClient<EmbeddingClient>();
 
-// --- Vector store ---
-builder.Services.AddSingleton<IVectorStore, PgVectorStore>();
+// --- Semantic memory store (FalkorDB — vectors + graph + FSRS) ---
+builder.Services.AddSingleton<ISemanticMemoryStore, FalkorDbSemanticStore>();
 
-// --- EF Core (FSRS tables + identity) ---
-// Always register so DI resolution succeeds; connection errors surface at usage time if URL is empty.
+// --- EF Core (chat, identity, LLM observability) ---
 builder.Services.AddDbContextFactory<ClaraDbContext>(options =>
     options.UseNpgsql(config.Database.Url));
 builder.Services.AddSingleton<UserIdentityService>();
 builder.Services.AddSingleton<ChatHistoryService>();
+
+// --- LLM call logger ---
+builder.Services.AddSingleton<LlmCallLogger>();
 
 // --- FSRS / memory dynamics ---
 builder.Services.AddSingleton<MemoryDynamicsService>();
@@ -98,12 +98,6 @@ builder.Services.AddSingleton<CompositeScorer>();
 builder.Services.AddSingleton<ContradictionDetector>();
 builder.Services.AddSingleton<FactExtractor>();
 builder.Services.AddSingleton<SmartIngest>();
-
-// --- Graph store (optional, only if enabled) ---
-if (config.Memory.GraphStore.Enabled)
-{
-    builder.Services.AddSingleton<IGraphStore, FalkorDbStore>();
-}
 
 // --- Emotional context & topic recurrence ---
 builder.Services.AddSingleton<EmotionalContext>();
@@ -138,15 +132,24 @@ if (!string.IsNullOrEmpty(config.Database.Url))
         var dbFactory = host.Services.GetRequiredService<IDbContextFactory<ClaraDbContext>>();
         await using var db = await dbFactory.CreateDbContextAsync();
         await db.Database.EnsureCreatedAsync();
-        // Backfill NULL timestamps on projects (shared table with Python Clara)
-        await db.Database.ExecuteSqlRawAsync(
-            "UPDATE projects SET created_at = now(), updated_at = now() WHERE created_at IS NULL");
         console.MarkupLine("[dim]Database tables ensured.[/]");
     }
     catch (Exception ex)
     {
         console.MarkupLine($"[yellow]Database init warning: {ex.Message.EscapeMarkup()}[/]");
     }
+}
+
+// Ensure FalkorDB schema (vector index + scalar indexes)
+try
+{
+    var semanticStore = host.Services.GetRequiredService<ISemanticMemoryStore>();
+    await semanticStore.EnsureSchemaAsync();
+    console.MarkupLine("[dim]FalkorDB schema ensured.[/]");
+}
+catch (Exception ex)
+{
+    console.MarkupLine($"[yellow]FalkorDB schema warning: {ex.Message.EscapeMarkup()}[/]");
 }
 
 // Initialize MCP servers

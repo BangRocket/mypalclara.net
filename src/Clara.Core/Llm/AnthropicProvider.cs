@@ -16,6 +16,7 @@ public sealed class AnthropicProvider : ILlmProvider
 {
     private readonly HttpClient _http;
     private readonly ClaraConfig _config;
+    private readonly LlmCallLogger _callLogger;
     private readonly ILogger<AnthropicProvider> _logger;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -25,10 +26,11 @@ public sealed class AnthropicProvider : ILlmProvider
         WriteIndented = false,
     };
 
-    public AnthropicProvider(HttpClient http, ClaraConfig config, ILogger<AnthropicProvider> logger)
+    public AnthropicProvider(HttpClient http, ClaraConfig config, LlmCallLogger callLogger, ILogger<AnthropicProvider> logger)
     {
         _http = http;
         _config = config;
+        _callLogger = callLogger;
         _logger = logger;
 
         var provider = config.Llm.ActiveProvider;
@@ -196,20 +198,57 @@ public sealed class AnthropicProvider : ILlmProvider
     private async Task<JsonDocument> PostAsync(Dictionary<string, object?> body, CancellationToken ct)
     {
         var json = JsonSerializer.Serialize(body, JsonOpts);
-        _logger.LogDebug("Anthropic request: {Model}", body["model"]);
+        var model = body["model"]?.ToString() ?? "unknown";
+        _logger.LogDebug("Anthropic request: {Model}", model);
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         using var content = new StringContent(json, Encoding.UTF8, "application/json");
         var response = await _http.PostAsync("messages", content, ct);
-
         var responseBody = await response.Content.ReadAsStringAsync(ct);
+        sw.Stop();
 
         if (!response.IsSuccessStatusCode)
         {
             _logger.LogError("Anthropic API error {Status}: {Body}",
                 response.StatusCode, responseBody[..Math.Min(500, responseBody.Length)]);
+
+            // Log the failed call (fire-and-forget)
+            _ = _callLogger.LogCallAsync(
+                conversationId: null, model, provider: "anthropic",
+                requestBody: json, responseBody: responseBody,
+                latencyMs: (int)sw.ElapsedMilliseconds,
+                status: "error",
+                errorMessage: $"{response.StatusCode}",
+                ct: ct);
+
             throw new HttpRequestException(
                 $"Anthropic API returned {response.StatusCode}: {responseBody[..Math.Min(500, responseBody.Length)]}");
         }
+
+        // Extract token usage from response
+        int? inputTokens = null, outputTokens = null, cacheReadTokens = null, cacheWriteTokens = null;
+        try
+        {
+            using var usageDoc = JsonDocument.Parse(responseBody);
+            if (usageDoc.RootElement.TryGetProperty("usage", out var usage))
+            {
+                inputTokens = usage.TryGetProperty("input_tokens", out var it) ? it.GetInt32() : null;
+                outputTokens = usage.TryGetProperty("output_tokens", out var ot) ? ot.GetInt32() : null;
+                cacheReadTokens = usage.TryGetProperty("cache_read_input_tokens", out var cr) ? cr.GetInt32() : null;
+                cacheWriteTokens = usage.TryGetProperty("cache_creation_input_tokens", out var cw) ? cw.GetInt32() : null;
+            }
+        }
+        catch { /* don't fail the call over logging */ }
+
+        // Log successful call (fire-and-forget)
+        _ = _callLogger.LogCallAsync(
+            conversationId: null, model, provider: "anthropic",
+            requestBody: json, responseBody: responseBody,
+            inputTokens: inputTokens, outputTokens: outputTokens,
+            cacheReadTokens: cacheReadTokens, cacheWriteTokens: cacheWriteTokens,
+            latencyMs: (int)sw.ElapsedMilliseconds,
+            status: "success",
+            ct: ct);
 
         return JsonDocument.Parse(responseBody);
     }

@@ -3,21 +3,19 @@ using Clara.Core.Configuration;
 using Clara.Core.Memory.Context;
 using Clara.Core.Memory.Dynamics;
 using Clara.Core.Memory.Extraction;
-using Clara.Core.Memory.Graph;
-using Clara.Core.Memory.Vector;
 using Microsoft.Extensions.Logging;
 
 namespace Clara.Core.Memory;
 
 /// <summary>
-/// Top-level memory orchestrator. Port of clara_core/memory_manager.py:MemoryManager.
-/// Ties together vector store, FSRS, graph, emotional context, and topic recurrence.
+/// Top-level memory orchestrator. Ties together semantic memory store, FSRS,
+/// emotional context, and topic recurrence.
 /// READ methods accept IReadOnlyList&lt;string&gt; userIds for cross-platform identity.
 /// WRITE methods use single userId (platform-specific).
 /// </summary>
 public sealed class MemoryService
 {
-    private readonly IVectorStore _vectorStore;
+    private readonly ISemanticMemoryStore _store;
     private readonly EmbeddingClient _embeddingClient;
     private readonly MemoryDynamicsService _dynamics;
     private readonly CompositeScorer _scorer;
@@ -25,32 +23,29 @@ public sealed class MemoryService
     private readonly ILogger<MemoryService> _logger;
 
     // Optional subsystems — null when not configured
-    private readonly IGraphStore? _graphStore;
     private readonly EmotionalContext? _emotionalContext;
     private readonly TopicRecurrence? _topicRecurrence;
     private readonly FactExtractor? _factExtractor;
     private readonly SmartIngest? _smartIngest;
 
     public MemoryService(
-        IVectorStore vectorStore,
+        ISemanticMemoryStore store,
         EmbeddingClient embeddingClient,
         MemoryDynamicsService dynamics,
         CompositeScorer scorer,
         ClaraConfig config,
         ILogger<MemoryService> logger,
-        IGraphStore? graphStore = null,
         EmotionalContext? emotionalContext = null,
         TopicRecurrence? topicRecurrence = null,
         FactExtractor? factExtractor = null,
         SmartIngest? smartIngest = null)
     {
-        _vectorStore = vectorStore;
+        _store = store;
         _embeddingClient = embeddingClient;
         _dynamics = dynamics;
         _scorer = scorer;
         _config = config;
         _logger = logger;
-        _graphStore = graphStore;
         _emotionalContext = emotionalContext;
         _topicRecurrence = topicRecurrence;
         _factExtractor = factExtractor;
@@ -65,29 +60,23 @@ public sealed class MemoryService
     {
         var embedding = await _embeddingClient.EmbedAsync(query, ct);
 
-        // Build user filter — single string or list depending on count
-        object userFilter = userIds.Count == 1 ? userIds[0] : (object)userIds;
-
         // Parallel retrieval — core
-        var keyMemoriesTask = _vectorStore.GetAllAsync(
-            new Dictionary<string, object?> { ["user_id"] = userFilter, ["is_key"] = "true" },
+        var keyMemoriesTask = _store.GetAllMemoriesAsync(
+            userIds,
+            new Dictionary<string, object?> { ["is_key"] = "true" },
             limit: 15, ct: ct);
 
-        var searchTask = _vectorStore.SearchAsync(
-            embedding,
-            new Dictionary<string, object?> { ["user_id"] = userFilter },
-            limit: 35, ct: ct);
+        var searchTask = _store.SearchAsync(embedding, userIds, limit: 35, ct: ct);
 
         // Parallel retrieval — optional subsystems
-        var graphTask = _graphStore?.SearchAsync(query, userIds, embedding, ct: ct);
+        var graphTask = _store.SearchEntitiesAsync(query, userIds, embedding, ct: ct);
         var emotionalTask = _emotionalContext?.RetrieveAsync(userIds, ct: ct);
         var topicsTask = _topicRecurrence?.GetRecurringTopicsAsync(userIds, ct: ct);
 
-        // Await all
         await Task.WhenAll(
             keyMemoriesTask,
             searchTask,
-            graphTask ?? Task.CompletedTask,
+            graphTask,
             emotionalTask ?? Task.CompletedTask,
             topicsTask ?? Task.CompletedTask);
 
@@ -97,7 +86,7 @@ public sealed class MemoryService
         // FSRS re-rank search results
         searchResults = await _scorer.RankAsync(searchResults, userIds);
 
-        var graphRelations = graphTask is not null ? await graphTask : [];
+        var graphRelations = await graphTask;
         var emotionalCtx = emotionalTask is not null ? await emotionalTask : [];
         var recurringTopics = topicsTask is not null ? await topicsTask : [];
 
@@ -180,14 +169,11 @@ public sealed class MemoryService
                     _logger.LogDebug("Ingested fact: {Action} — {Reason}", result.Action, result.Reason);
                 }
 
-                // Add facts to graph store
-                if (_graphStore is not null)
+                // Add facts to graph
+                foreach (var fact in facts)
                 {
-                    foreach (var fact in facts)
-                    {
-                        try { await _graphStore.AddAsync(fact, userId, ct: ct); }
-                        catch (Exception ex) { _logger.LogDebug(ex, "Graph add failed for fact"); }
-                    }
+                    try { await _store.AddEntityDataAsync(fact, userId, ct: ct); }
+                    catch (Exception ex) { _logger.LogDebug(ex, "Graph add failed for fact"); }
                 }
             }
             catch (Exception ex)
@@ -253,22 +239,17 @@ public sealed class MemoryService
     /// <summary>Search memories across linked user IDs (for !memory search command).</summary>
     public async Task<List<MemoryItem>> SearchAsync(string query, IReadOnlyList<string> userIds, int limit = 10, CancellationToken ct = default)
     {
-        object userFilter = userIds.Count == 1 ? userIds[0] : (object)userIds;
         var embedding = await _embeddingClient.EmbedAsync(query, ct);
-        var results = await _vectorStore.SearchAsync(
-            embedding,
-            new Dictionary<string, object?> { ["user_id"] = userFilter },
-            limit: limit, ct: ct);
-
+        var results = await _store.SearchAsync(embedding, userIds, limit: limit, ct: ct);
         return await _scorer.RankAsync(results, userIds);
     }
 
     /// <summary>Get key memories across linked user IDs (for !memory key command).</summary>
     public Task<List<MemoryItem>> GetKeyMemoriesAsync(IReadOnlyList<string> userIds, CancellationToken ct = default)
     {
-        object userFilter = userIds.Count == 1 ? userIds[0] : (object)userIds;
-        return _vectorStore.GetAllAsync(
-            new Dictionary<string, object?> { ["user_id"] = userFilter, ["is_key"] = "true" },
+        return _store.GetAllMemoriesAsync(
+            userIds,
+            new Dictionary<string, object?> { ["is_key"] = "true" },
             limit: 50, ct: ct);
     }
 }

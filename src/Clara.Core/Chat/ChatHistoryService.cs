@@ -7,18 +7,17 @@ using Microsoft.Extensions.Logging;
 namespace Clara.Core.Chat;
 
 /// <summary>
-/// PostgreSQL-backed conversation persistence.
-/// Shares projects/sessions/messages tables with Python Clara so
-/// CLI sessions are visible in web UI and vice versa.
+/// PostgreSQL-backed conversation persistence using the new adapter/channel/conversation schema.
+/// Supports cross-adapter context retrieval for unified Clara experience.
 /// </summary>
 public sealed class ChatHistoryService
 {
     private readonly IDbContextFactory<ClaraDbContext> _dbFactory;
     private readonly ILogger<ChatHistoryService> _logger;
 
-    private string? _currentSessionId;
+    private Guid? _currentConversationId;
 
-    public string? CurrentSessionId => _currentSessionId;
+    public Guid? CurrentConversationId => _currentConversationId;
 
     public ChatHistoryService(IDbContextFactory<ClaraDbContext> dbFactory, ILogger<ChatHistoryService> logger)
     {
@@ -26,77 +25,56 @@ public sealed class ChatHistoryService
         _logger = logger;
     }
 
-    /// <summary>Build CLI context ID matching Python gateway path for CLI DMs.</summary>
-    public static string BuildCliContextId(string userId) => $"dm-{userId}";
-
     /// <summary>
-    /// Get or create an active session for the given user/context.
-    /// Mirrors Python's _get_or_create_db_session logic.
+    /// Get or create an active conversation for the given channel and user.
     /// </summary>
-    public async Task<string?> GetOrCreateSessionAsync(string userId, string contextId, CancellationToken ct = default)
+    public async Task<Guid?> GetOrCreateConversationAsync(Guid channelId, Guid userId, CancellationToken ct = default)
     {
         try
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-            // Get or create default project for this user
-            var project = await db.Projects
-                .FirstOrDefaultAsync(p => p.OwnerId == userId, ct);
-
-            if (project is null)
-            {
-                project = new ProjectEntity
-                {
-                    OwnerId = userId,
-                    Name = "Default",
-                };
-                db.Projects.Add(project);
-                await db.SaveChangesAsync(ct);
-                _logger.LogInformation("Created default project {ProjectId} for {UserId}", project.Id, userId);
-            }
-
-            // Find active (non-archived) session
-            var session = await db.Sessions
-                .Where(s => s.UserId == userId && s.ContextId == contextId && s.ProjectId == project.Id && s.Archived != "true")
-                .OrderByDescending(s => s.LastActivityAt)
+            // Find active (non-archived) conversation
+            var conversation = await db.Conversations
+                .Where(c => c.ChannelId == channelId && c.UserId == userId && !c.Archived)
+                .OrderByDescending(c => c.LastActivityAt)
                 .FirstOrDefaultAsync(ct);
 
-            if (session is not null)
+            if (conversation is not null)
             {
-                _currentSessionId = session.Id;
-                _logger.LogDebug("Resumed session {SessionId}", session.Id);
-                return session.Id;
+                _currentConversationId = conversation.Id;
+                _logger.LogDebug("Resumed conversation {ConversationId}", conversation.Id);
+                return conversation.Id;
             }
 
-            // Find most recent prior session for chaining
-            var previousSession = await db.Sessions
-                .Where(s => s.UserId == userId && s.ContextId == contextId && s.ProjectId == project.Id)
-                .OrderByDescending(s => s.LastActivityAt)
+            // Find most recent prior conversation for chaining
+            var previous = await db.Conversations
+                .Where(c => c.ChannelId == channelId && c.UserId == userId)
+                .OrderByDescending(c => c.LastActivityAt)
                 .FirstOrDefaultAsync(ct);
 
-            session = new SessionEntity
+            conversation = new ConversationEntity
             {
+                ChannelId = channelId,
                 UserId = userId,
-                ProjectId = project.Id,
-                ContextId = contextId,
-                PreviousSessionId = previousSession?.Id,
+                PreviousConversationId = previous?.Id,
             };
-            db.Sessions.Add(session);
+            db.Conversations.Add(conversation);
             await db.SaveChangesAsync(ct);
 
-            _currentSessionId = session.Id;
-            _logger.LogInformation("Created new session {SessionId} for {UserId}", session.Id, userId);
-            return session.Id;
+            _currentConversationId = conversation.Id;
+            _logger.LogInformation("Created new conversation {ConversationId}", conversation.Id);
+            return conversation.Id;
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "GetOrCreateSession failed for {UserId}", userId);
+            _logger.LogWarning(ex, "GetOrCreateConversation failed");
             return null;
         }
     }
 
     /// <summary>Persist a user/assistant message pair.</summary>
-    public async Task StoreExchangeAsync(string sessionId, string userId, string userMsg, string assistantMsg, CancellationToken ct = default)
+    public async Task StoreExchangeAsync(Guid conversationId, Guid? userId, string userMsg, string assistantMsg, CancellationToken ct = default)
     {
         try
         {
@@ -105,7 +83,7 @@ public sealed class ChatHistoryService
 
             db.Messages.Add(new MessageEntity
             {
-                SessionId = sessionId,
+                ConversationId = conversationId,
                 UserId = userId,
                 Role = "user",
                 Content = userMsg,
@@ -114,35 +92,35 @@ public sealed class ChatHistoryService
 
             db.Messages.Add(new MessageEntity
             {
-                SessionId = sessionId,
-                UserId = userId,
+                ConversationId = conversationId,
+                UserId = null, // assistant messages have no user
                 Role = "assistant",
                 Content = assistantMsg,
                 CreatedAt = now.AddMilliseconds(1),
             });
 
-            // Touch session activity
-            var session = await db.Sessions.FindAsync([sessionId], ct);
-            if (session is not null)
-                session.LastActivityAt = now;
+            // Touch conversation activity
+            var conversation = await db.Conversations.FindAsync([conversationId], ct);
+            if (conversation is not null)
+                conversation.LastActivityAt = now;
 
             await db.SaveChangesAsync(ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "StoreExchange failed for session {SessionId}", sessionId);
+            _logger.LogWarning(ex, "StoreExchange failed for conversation {ConversationId}", conversationId);
         }
     }
 
-    /// <summary>Load recent messages from a session, returned as ChatMessage list.</summary>
-    public async Task<List<ChatMessage>> LoadRecentMessagesAsync(string sessionId, int count = 15, CancellationToken ct = default)
+    /// <summary>Load recent messages from a conversation, returned as ChatMessage list.</summary>
+    public async Task<List<ChatMessage>> LoadRecentMessagesAsync(Guid conversationId, int count = 15, CancellationToken ct = default)
     {
         try
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
             var entities = await db.Messages
-                .Where(m => m.SessionId == sessionId)
+                .Where(m => m.ConversationId == conversationId)
                 .OrderByDescending(m => m.CreatedAt)
                 .Take(count)
                 .OrderBy(m => m.CreatedAt)
@@ -156,48 +134,132 @@ public sealed class ChatHistoryService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "LoadRecentMessages failed for session {SessionId}", sessionId);
+            _logger.LogWarning(ex, "LoadRecentMessages failed for conversation {ConversationId}", conversationId);
             return [];
         }
     }
 
-    /// <summary>List recent sessions across all linked user IDs (cross-platform visibility).</summary>
-    public async Task<List<SessionEntity>> GetUserSessionsAsync(IReadOnlyList<string> userIds, int limit = 20, CancellationToken ct = default)
+    /// <summary>
+    /// Get recent messages across ALL active conversations for the given user IDs,
+    /// annotated with adapter type + channel name for cross-context awareness.
+    /// </summary>
+    public async Task<List<CrossContextMessage>> GetRecentCrossContextAsync(
+        IReadOnlyList<Guid> userIds, int limit = 20, CancellationToken ct = default)
     {
         try
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-            return await db.Sessions
-                .Where(s => userIds.Contains(s.UserId))
-                .OrderByDescending(s => s.LastActivityAt)
+            var messages = await db.Messages
+                .Include(m => m.Conversation!)
+                    .ThenInclude(c => c.Channel!)
+                        .ThenInclude(ch => ch.Adapter)
+                .Where(m => m.Conversation != null
+                    && userIds.Contains(m.Conversation.UserId)
+                    && m.Role == "user")
+                .OrderByDescending(m => m.CreatedAt)
+                .Take(limit)
+                .OrderBy(m => m.CreatedAt)
+                .Select(m => new CrossContextMessage
+                {
+                    AdapterType = m.Conversation!.Channel!.Adapter!.Type,
+                    ChannelName = m.Conversation.Channel.Name,
+                    Role = m.Role,
+                    Content = m.Content,
+                    CreatedAt = m.CreatedAt,
+                })
+                .ToListAsync(ct);
+
+            return messages;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "GetRecentCrossContext failed");
+            return [];
+        }
+    }
+
+    /// <summary>List recent conversations across all linked user IDs.</summary>
+    public async Task<List<ConversationEntity>> GetUserConversationsAsync(IReadOnlyList<Guid> userIds, int limit = 20, CancellationToken ct = default)
+    {
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            return await db.Conversations
+                .Where(c => userIds.Contains(c.UserId))
+                .OrderByDescending(c => c.LastActivityAt)
                 .Take(limit)
                 .ToListAsync(ct);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "GetUserSessions failed");
+            _logger.LogWarning(ex, "GetUserConversations failed");
             return [];
         }
     }
 
-    /// <summary>Touch session last_activity_at timestamp.</summary>
-    public async Task UpdateSessionActivityAsync(string sessionId, CancellationToken ct = default)
+    /// <summary>Get or create a CLI adapter and channel for the given user.</summary>
+    public async Task<(Guid AdapterId, Guid ChannelId)?> EnsureCliChannelAsync(Guid userId, CancellationToken ct = default)
     {
         try
         {
             await using var db = await _dbFactory.CreateDbContextAsync(ct);
 
-            var session = await db.Sessions.FindAsync([sessionId], ct);
-            if (session is not null)
+            // Get or create CLI adapter
+            var adapter = await db.Adapters
+                .FirstOrDefaultAsync(a => a.Type == "cli", ct);
+
+            if (adapter is null)
             {
-                session.LastActivityAt = DateTime.UtcNow;
+                adapter = new AdapterEntity { Type = "cli", Name = "CLI" };
+                db.Adapters.Add(adapter);
                 await db.SaveChangesAsync(ct);
             }
+
+            // Get or create DM channel for this user
+            var externalId = $"dm-{userId}";
+            var channel = await db.Channels
+                .FirstOrDefaultAsync(c => c.AdapterId == adapter.Id && c.ExternalId == externalId, ct);
+
+            if (channel is null)
+            {
+                channel = new ChannelEntity
+                {
+                    AdapterId = adapter.Id,
+                    ExternalId = externalId,
+                    Name = "CLI DM",
+                    ChannelType = "dm",
+                };
+                db.Channels.Add(channel);
+                await db.SaveChangesAsync(ct);
+            }
+
+            return (adapter.Id, channel.Id);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "UpdateSessionActivity failed for session {SessionId}", sessionId);
+            _logger.LogWarning(ex, "EnsureCliChannel failed");
+            return null;
         }
+    }
+}
+
+/// <summary>A message annotated with its source adapter and channel for cross-context display.</summary>
+public sealed class CrossContextMessage
+{
+    public required string AdapterType { get; init; }
+    public required string ChannelName { get; init; }
+    public required string Role { get; init; }
+    public required string Content { get; init; }
+    public required DateTime CreatedAt { get; init; }
+
+    public override string ToString()
+    {
+        var ago = DateTime.UtcNow - CreatedAt;
+        var agoStr = ago.TotalMinutes < 1 ? "now" :
+            ago.TotalMinutes < 60 ? $"{(int)ago.TotalMinutes} min ago" :
+            $"{(int)ago.TotalHours}h ago";
+        return $"[{AdapterType} {ChannelName}, {agoStr}] {Content}";
     }
 }

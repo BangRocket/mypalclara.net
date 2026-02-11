@@ -1,16 +1,14 @@
-using Clara.Core.Memory.Vector;
 using Microsoft.Extensions.Logging;
 
 namespace Clara.Core.Memory.Context;
 
 /// <summary>
 /// Sentiment tracking and emotional arc computation.
-/// Port of clara_core/emotional_context.py.
 /// Uses simple lexicon-based VADER-style sentiment analysis.
 /// </summary>
 public sealed class EmotionalContext
 {
-    private readonly IVectorStore _vectorStore;
+    private readonly ISemanticMemoryStore _store;
     private readonly EmbeddingClient _embeddingClient;
     private readonly ILogger<EmotionalContext> _logger;
 
@@ -38,9 +36,9 @@ public sealed class EmotionalContext
         ["sucks"] = -2.0f, ["shit"] = -1.5f, ["damn"] = -1.0f, ["fuck"] = -1.5f,
     };
 
-    public EmotionalContext(IVectorStore vectorStore, EmbeddingClient embeddingClient, ILogger<EmotionalContext> logger)
+    public EmotionalContext(ISemanticMemoryStore store, EmbeddingClient embeddingClient, ILogger<EmotionalContext> logger)
     {
-        _vectorStore = vectorStore;
+        _store = store;
         _embeddingClient = embeddingClient;
         _logger = logger;
     }
@@ -68,7 +66,6 @@ public sealed class EmotionalContext
 
         foreach (var word in words)
         {
-            // Strip basic punctuation
             var clean = word.TrimEnd('.', ',', '!', '?', ';', ':');
             if (Lexicon.TryGetValue(clean, out var score))
             {
@@ -79,9 +76,8 @@ public sealed class EmotionalContext
 
         if (count == 0) return 0f;
 
-        // Normalize to -1..+1 range (VADER-style compound)
         var raw = total / count;
-        return raw / (float)Math.Sqrt(raw * raw + 15); // Normalization factor
+        return raw / (float)Math.Sqrt(raw * raw + 15);
     }
 
     /// <summary>Compute emotional arc for a session. Requires >= 3 messages.</summary>
@@ -113,7 +109,7 @@ public sealed class EmotionalContext
         return $"Emotional arc was {arc} throughout. Ended with {energy} energy.";
     }
 
-    /// <summary>Finalize and store emotional context for a session (on idle or session end).</summary>
+    /// <summary>Finalize and store emotional context for a session.</summary>
     public async Task FinalizeSessionAsync(string userId, string channelId, string? topic = null, CancellationToken ct = default)
     {
         var arc = ComputeArc(userId, channelId);
@@ -126,37 +122,30 @@ public sealed class EmotionalContext
         var entries = _sessions.GetValueOrDefault(key);
         var endAvg = entries?.TakeLast(3).Average(e => e.Score) ?? 0;
 
-        var payload = new Dictionary<string, object?>
-        {
-            ["data"] = memory,
-            ["user_id"] = userId,
-            ["memory_type"] = "emotional_context",
-            ["channel_id"] = channelId,
-            ["sentiment_end"] = endAvg,
-            ["created_at"] = DateTime.UtcNow.ToString("o"),
-        };
-
-        // Generate embedding and store
         var embedding = await _embeddingClient.EmbedAsync(memory, ct);
         var id = Guid.NewGuid().ToString();
-        await _vectorStore.InsertAsync(id, embedding, payload, ct);
+
+        await _store.InsertMemoryAsync(id, embedding, memory, userId,
+            new Dictionary<string, object?>
+            {
+                ["memory_type"] = "emotional_context",
+                ["channel_id"] = channelId,
+                ["sentiment_end"] = endAvg.ToString("F3"),
+            }, ct);
+
         _logger.LogDebug("Finalized emotional context: {Arc} (id={Id})", arc, id);
 
-        // Clear session
         _sessions.Remove(key);
     }
 
-    /// <summary>Retrieve recent emotional context from vector store (across all linked user IDs).</summary>
+    /// <summary>Retrieve recent emotional context from store (across all linked user IDs).</summary>
     public async Task<List<string>> RetrieveAsync(IReadOnlyList<string> userIds, int maxItems = 3, CancellationToken ct = default)
     {
         try
         {
-            var items = await _vectorStore.GetAllAsync(
-                new Dictionary<string, object?>
-                {
-                    ["user_id"] = userIds.Count == 1 ? userIds[0] : (object)userIds,
-                    ["memory_type"] = "emotional_context",
-                },
+            var items = await _store.GetAllMemoriesAsync(
+                userIds,
+                new Dictionary<string, object?> { ["memory_type"] = "emotional_context" },
                 limit: maxItems, ct: ct);
 
             return items

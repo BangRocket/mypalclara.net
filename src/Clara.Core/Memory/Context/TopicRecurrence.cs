@@ -1,30 +1,28 @@
 using System.Text.Json;
 using Clara.Core.Llm;
-using Clara.Core.Memory.Vector;
 using Microsoft.Extensions.Logging;
 
 namespace Clara.Core.Memory.Context;
 
 /// <summary>
 /// Topic extraction and recurrence pattern detection.
-/// Port of clara_core/topic_recurrence.py.
-/// Uses LLM-based extraction + vector store for persistence.
+/// Uses LLM-based extraction + FalkorDB Memory nodes for persistence.
 /// </summary>
 public sealed class TopicRecurrence
 {
     private readonly RookProvider _rook;
-    private readonly IVectorStore _vectorStore;
+    private readonly ISemanticMemoryStore _store;
     private readonly EmbeddingClient _embeddingClient;
     private readonly ILogger<TopicRecurrence> _logger;
 
     public TopicRecurrence(
         RookProvider rook,
-        IVectorStore vectorStore,
+        ISemanticMemoryStore store,
         EmbeddingClient embeddingClient,
         ILogger<TopicRecurrence> logger)
     {
         _rook = rook;
-        _vectorStore = vectorStore;
+        _store = store;
         _embeddingClient = embeddingClient;
         _logger = logger;
     }
@@ -63,7 +61,6 @@ public sealed class TopicRecurrence
             var topics = JsonSerializer.Deserialize<List<TopicMention>>(trimmed,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
-            // Dedup by name, take max 3
             var deduped = topics?
                 .GroupBy(t => t.Topic?.ToLowerInvariant() ?? "")
                 .Select(g => g.First())
@@ -80,28 +77,24 @@ public sealed class TopicRecurrence
         }
     }
 
-    /// <summary>Store a topic mention in the vector store.</summary>
+    /// <summary>Store a topic mention as a Memory node.</summary>
     public async Task StoreMentionAsync(
         TopicMention topic, string userId, float[]? embedding = null, CancellationToken ct = default)
     {
         var dataText = $"Topic: {topic.Topic} ({topic.TopicType}) - {topic.ContextSnippet}";
 
-        var payload = new Dictionary<string, object?>
-        {
-            ["data"] = dataText,
-            ["user_id"] = userId,
-            ["memory_type"] = "topic_mention",
-            ["topic_name"] = topic.Topic,
-            ["topic_type"] = topic.TopicType,
-            ["emotional_weight"] = topic.EmotionalWeight,
-            ["created_at"] = DateTime.UtcNow.ToString("o"),
-        };
-
-        // Generate embedding if not provided
         embedding ??= await _embeddingClient.EmbedAsync(dataText, ct);
 
         var id = Guid.NewGuid().ToString();
-        await _vectorStore.InsertAsync(id, embedding, payload, ct);
+        await _store.InsertMemoryAsync(id, embedding, dataText, userId,
+            new Dictionary<string, object?>
+            {
+                ["memory_type"] = "topic_mention",
+                ["topic_name"] = topic.Topic,
+                ["topic_type"] = topic.TopicType,
+                ["emotional_weight"] = topic.EmotionalWeight,
+            }, ct);
+
         _logger.LogDebug("Stored topic mention: {Topic} (id={Id})", topic.Topic, id);
     }
 
@@ -111,15 +104,11 @@ public sealed class TopicRecurrence
     {
         try
         {
-            var items = await _vectorStore.GetAllAsync(
-                new Dictionary<string, object?>
-                {
-                    ["user_id"] = userIds.Count == 1 ? userIds[0] : (object)userIds,
-                    ["memory_type"] = "topic_mention",
-                },
+            var items = await _store.GetAllMemoriesAsync(
+                userIds,
+                new Dictionary<string, object?> { ["memory_type"] = "topic_mention" },
                 limit: 100, ct: ct);
 
-            // 14-day lookback filter
             var cutoff = DateTime.UtcNow.AddDays(-14);
             var recent = items.Where(i =>
             {
@@ -127,7 +116,6 @@ public sealed class TopicRecurrence
                 return createdStr is null || !DateTime.TryParse(createdStr, out var created) || created >= cutoff;
             }).ToList();
 
-            // Group by topic name, filter >= 2 mentions
             var recurring = recent
                 .GroupBy(i => i.Metadata.GetValueOrDefault("topic_name")?.ToString() ?? "")
                 .Where(g => !string.IsNullOrEmpty(g.Key) && g.Count() >= 2)
@@ -154,7 +142,7 @@ public sealed class TopicRecurrence
 public sealed class TopicMention
 {
     public string Topic { get; set; } = "";
-    public string TopicType { get; set; } = "theme"; // "entity" or "theme"
+    public string TopicType { get; set; } = "theme";
     public string ContextSnippet { get; set; } = "";
-    public string EmotionalWeight { get; set; } = "light"; // "light", "moderate", "heavy"
+    public string EmotionalWeight { get; set; } = "light";
 }

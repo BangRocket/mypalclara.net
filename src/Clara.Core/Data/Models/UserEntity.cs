@@ -3,14 +3,12 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace Clara.Core.Data.Models;
 
-/// <summary>Maps to canonical_users table — unified identity across platforms.</summary>
-[Table("canonical_users")]
-public class CanonicalUserEntity
+[Table("users")]
+public class UserEntity
 {
     [Key]
     [Column("id")]
-    [MaxLength(255)]
-    public string Id { get; set; } = Guid.NewGuid().ToString();
+    public Guid Id { get; set; } = Guid.NewGuid();
 
     [Column("display_name")]
     [MaxLength(255)]

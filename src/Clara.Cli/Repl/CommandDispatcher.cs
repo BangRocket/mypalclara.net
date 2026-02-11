@@ -2,7 +2,6 @@ using Clara.Core.Chat;
 using Clara.Core.Configuration;
 using Clara.Core.Mcp;
 using Clara.Core.Memory;
-using Clara.Core.Memory.Graph;
 using Spectre.Console;
 
 namespace Clara.Cli.Repl;
@@ -12,7 +11,7 @@ public sealed class CommandDispatcher
 {
     private readonly McpServerManager _mcp;
     private readonly MemoryService? _memory;
-    private readonly IGraphStore? _graphStore;
+    private readonly ISemanticMemoryStore? _semanticStore;
     private readonly ChatHistoryService? _chatHistory;
     private readonly ClaraConfig _config;
     private readonly IAnsiConsole _console;
@@ -20,14 +19,17 @@ public sealed class CommandDispatcher
     /// <summary>Resolved linked user IDs for READ queries. Set by ChatRepl after identity resolution.</summary>
     public IReadOnlyList<string> UserIds { get; set; } = [];
 
+    /// <summary>Resolved user Guids for chat history queries.</summary>
+    public IReadOnlyList<Guid> UserGuids { get; set; } = [];
+
     public CommandDispatcher(
         McpServerManager mcp, ClaraConfig config, IAnsiConsole console,
-        MemoryService? memory = null, IGraphStore? graphStore = null,
+        MemoryService? memory = null, ISemanticMemoryStore? semanticStore = null,
         ChatHistoryService? chatHistory = null)
     {
         _mcp = mcp;
         _memory = memory;
-        _graphStore = graphStore;
+        _semanticStore = semanticStore;
         _chatHistory = chatHistory;
         _config = config;
         _console = console;
@@ -91,7 +93,7 @@ public sealed class CommandDispatcher
         table.AddRow("!mcp list", "List MCP servers");
         table.AddRow("!mcp status", "Show MCP server status");
         table.AddRow("!mcp tools [server]", "List tools (all or for a server)");
-        table.AddRow("!history", "Show recent sessions (cross-platform)");
+        table.AddRow("!history", "Show recent conversations (cross-platform)");
         table.AddRow("!memory search <query>", "Search memories");
         table.AddRow("!memory key", "Show key memories");
         table.AddRow("!memory graph <query>", "Search graph relationships");
@@ -195,13 +197,13 @@ public sealed class CommandDispatcher
 
     private async Task HandleGraphSearchAsync(string query)
     {
-        if (_graphStore is null)
+        if (_semanticStore is null)
         {
-            _console.MarkupLine("[yellow]Graph store not configured (check graph_store settings).[/]");
+            _console.MarkupLine("[yellow]Semantic store not configured.[/]");
             return;
         }
 
-        var results = await _graphStore.SearchAsync(query, UserIds);
+        var results = await _semanticStore.SearchEntitiesAsync(query, UserIds);
         if (results.Count == 0)
         {
             _console.MarkupLine("[dim]No graph relationships found.[/]");
@@ -223,25 +225,23 @@ public sealed class CommandDispatcher
             return;
         }
 
-        var sessions = await _chatHistory.GetUserSessionsAsync(UserIds);
-        if (sessions.Count == 0)
+        var conversations = await _chatHistory.GetUserConversationsAsync(UserGuids);
+        if (conversations.Count == 0)
         {
-            _console.MarkupLine("[dim]No sessions found.[/]");
+            _console.MarkupLine("[dim]No conversations found.[/]");
             return;
         }
 
-        var table = new Table().BorderColor(Color.Grey).Title("Recent Sessions");
-        table.AddColumn("Context");
-        table.AddColumn("User");
+        var table = new Table().BorderColor(Color.Grey).Title("Recent Conversations");
+        table.AddColumn("ID");
         table.AddColumn("Last Activity");
         table.AddColumn("Archived");
-        foreach (var s in sessions)
+        foreach (var c in conversations)
         {
             table.AddRow(
-                s.ContextId.EscapeMarkup(),
-                s.UserId.EscapeMarkup(),
-                s.LastActivityAt.ToString("yyyy-MM-dd HH:mm"),
-                s.Archived == "true" ? "yes" : "no");
+                c.Id.ToString()[..8],
+                c.LastActivityAt.ToString("yyyy-MM-dd HH:mm"),
+                c.Archived ? "yes" : "no");
         }
         _console.Write(table);
     }

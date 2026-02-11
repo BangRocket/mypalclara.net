@@ -1,0 +1,37 @@
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: clara
+      POSTGRES_PASSWORD: clara
+      POSTGRES_DB: clara
+    ports:
+      - "5442:5432"
+    volumes:
+      - clara_pg_data:/var/lib/postgresql/data
+
+  falkordb:
+    image: falkordb/falkordb:latest
+    restart: unless-stopped
+    ports:
+      - "6380:6379"
+    volumes:
+      - clara_falkor_data:/data
+    command: >
+      --loadmodule /FalkorDB/bin/linux-x64-release/src/falkordb.so
+      --save 60 1
+      --appendonly yes
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - clara_redis_data:/data
+
+volumes:
+  clara_pg_data:
+  clara_falkor_data:
+  clara_redis_data:

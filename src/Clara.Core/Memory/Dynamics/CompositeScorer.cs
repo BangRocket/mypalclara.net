@@ -1,4 +1,3 @@
-using Clara.Core.Data.Models;
 using Microsoft.Extensions.Logging;
 
 namespace Clara.Core.Memory.Dynamics;
@@ -24,7 +23,6 @@ public sealed class CompositeScorer
     {
         if (items.Count == 0) return items;
 
-        // Batch-load FSRS data across all linked user IDs
         var memoryIds = items.Select(i => i.Id);
         var dynamics = await _dynamicsService.BatchGetAsync(memoryIds, userIds);
 
@@ -51,7 +49,6 @@ public sealed class CompositeScorer
             }
             else
             {
-                // No FSRS data — use semantic score only
                 item.CompositeScore = item.Score;
             }
         }

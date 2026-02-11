@@ -7,7 +7,7 @@ namespace Clara.Core.Identity;
 
 /// <summary>
 /// Cross-platform user identity resolution.
-/// Port of db/user_identity.py — resolves a single prefixed_user_id to all linked platform IDs.
+/// Resolves a single prefixed_user_id to all linked platform IDs.
 /// </summary>
 public sealed class UserIdentityService
 {
@@ -37,7 +37,7 @@ public sealed class UserIdentityService
                 return [prefixedUserId];
 
             var allIds = await db.PlatformLinks
-                .Where(l => l.CanonicalUserId == link.CanonicalUserId)
+                .Where(l => l.UserId == link.UserId)
                 .Select(l => l.PrefixedUserId)
                 .ToListAsync();
 
@@ -51,9 +51,81 @@ public sealed class UserIdentityService
     }
 
     /// <summary>
-    /// Auto-create CanonicalUser + PlatformLink if none exists (idempotent).
-    /// When <paramref name="linkTo"/> is set, links to the same CanonicalUser as that user
-    /// instead of creating a new one — enabling cross-platform context sharing.
+    /// Resolve a prefixed user ID to its internal User Guid.
+    /// Creates the User + PlatformLink if none exists.
+    /// </summary>
+    public async Task<Guid?> ResolveUserGuidAsync(string prefixedUserId, string? displayName = null)
+    {
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+
+            var link = await db.PlatformLinks
+                .FirstOrDefaultAsync(l => l.PrefixedUserId == prefixedUserId);
+
+            if (link is not null)
+                return link.UserId;
+
+            // Auto-create
+            var parts = prefixedUserId.Split('-', 2);
+            var platform = parts.Length > 1 ? parts[0] : "cli";
+            var platformUserId = parts.Length > 1 ? parts[1] : prefixedUserId;
+            var name = displayName ?? prefixedUserId;
+
+            var user = new UserEntity { DisplayName = name };
+            db.Users.Add(user);
+            await db.SaveChangesAsync();
+
+            db.PlatformLinks.Add(new PlatformLinkEntity
+            {
+                UserId = user.Id,
+                Platform = platform,
+                PlatformUserId = platformUserId,
+                PrefixedUserId = prefixedUserId,
+                DisplayName = name,
+                LinkedVia = "auto",
+            });
+            await db.SaveChangesAsync();
+
+            _logger.LogInformation("Auto-created User + PlatformLink for {UserId}", prefixedUserId);
+            return user.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "ResolveUserGuid failed for {UserId}", prefixedUserId);
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Resolve all internal User Guids linked to a prefixed user ID.
+    /// Returns a single-element list in the common case.
+    /// </summary>
+    public async Task<IReadOnlyList<Guid>> ResolveAllUserGuidsAsync(string prefixedUserId)
+    {
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync();
+
+            var link = await db.PlatformLinks
+                .FirstOrDefaultAsync(l => l.PrefixedUserId == prefixedUserId);
+
+            if (link is null)
+                return [];
+
+            // All users linked to the same canonical user (via same User row)
+            return [link.UserId];
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "ResolveAllUserGuids failed for {UserId}", prefixedUserId);
+            return [];
+        }
+    }
+
+    /// <summary>
+    /// Auto-create User + PlatformLink if none exists (idempotent).
+    /// When linkTo is set, links to the same User as that user.
     /// </summary>
     public async Task EnsurePlatformLinkAsync(string prefixedUserId, string? displayName = null, string? linkTo = null)
     {
@@ -64,19 +136,18 @@ public sealed class UserIdentityService
             var existing = await db.PlatformLinks
                 .FirstOrDefaultAsync(l => l.PrefixedUserId == prefixedUserId);
 
-            // If link exists and linkTo is set, re-link if pointing to wrong canonical user
             if (existing is not null)
             {
                 if (!string.IsNullOrEmpty(linkTo))
                 {
                     var targetLink = await db.PlatformLinks
                         .FirstOrDefaultAsync(l => l.PrefixedUserId == linkTo);
-                    if (targetLink is not null && existing.CanonicalUserId != targetLink.CanonicalUserId)
+                    if (targetLink is not null && existing.UserId != targetLink.UserId)
                     {
-                        existing.CanonicalUserId = targetLink.CanonicalUserId;
+                        existing.UserId = targetLink.UserId;
                         existing.LinkedVia = "config";
                         await db.SaveChangesAsync();
-                        _logger.LogInformation("Re-linked {UserId} to CanonicalUser via {LinkTo}", prefixedUserId, linkTo);
+                        _logger.LogInformation("Re-linked {UserId} to User via {LinkTo}", prefixedUserId, linkTo);
                     }
                 }
                 return;
@@ -87,37 +158,36 @@ public sealed class UserIdentityService
             var platformUserId = parts.Length > 1 ? parts[1] : prefixedUserId;
             var name = displayName ?? prefixedUserId;
 
-            // If linkTo is specified, find that user's CanonicalUser and reuse it
-            string canonicalId;
+            Guid userId;
             if (!string.IsNullOrEmpty(linkTo))
             {
                 var targetLink = await db.PlatformLinks
                     .FirstOrDefaultAsync(l => l.PrefixedUserId == linkTo);
                 if (targetLink is not null)
                 {
-                    canonicalId = targetLink.CanonicalUserId;
-                    _logger.LogInformation("Linking {UserId} to existing CanonicalUser via {LinkTo}", prefixedUserId, linkTo);
+                    userId = targetLink.UserId;
+                    _logger.LogInformation("Linking {PrefixedUserId} to existing User via {LinkTo}", prefixedUserId, linkTo);
                 }
                 else
                 {
-                    _logger.LogWarning("link_to target {LinkTo} not found, creating new CanonicalUser", linkTo);
-                    var canonical = new CanonicalUserEntity { DisplayName = name };
-                    db.CanonicalUsers.Add(canonical);
+                    _logger.LogWarning("link_to target {LinkTo} not found, creating new User", linkTo);
+                    var user = new UserEntity { DisplayName = name };
+                    db.Users.Add(user);
                     await db.SaveChangesAsync();
-                    canonicalId = canonical.Id;
+                    userId = user.Id;
                 }
             }
             else
             {
-                var canonical = new CanonicalUserEntity { DisplayName = name };
-                db.CanonicalUsers.Add(canonical);
+                var user = new UserEntity { DisplayName = name };
+                db.Users.Add(user);
                 await db.SaveChangesAsync();
-                canonicalId = canonical.Id;
+                userId = user.Id;
             }
 
             db.PlatformLinks.Add(new PlatformLinkEntity
             {
-                CanonicalUserId = canonicalId,
+                UserId = userId,
                 Platform = platform,
                 PlatformUserId = platformUserId,
                 PrefixedUserId = prefixedUserId,
