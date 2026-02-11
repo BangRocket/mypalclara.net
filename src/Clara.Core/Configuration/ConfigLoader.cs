@@ -56,6 +56,10 @@ public static class ConfigLoader
         // Apply environment variable overrides (LLM__PROVIDER=openai → config.Llm.Provider)
         ApplyEnvironmentOverrides(config);
 
+        // Normalize PostgreSQL URIs (postgresql://...) to Npgsql key-value connection strings
+        config.Database.Url = NormalizePostgresUrl(config.Database.Url);
+        config.Memory.VectorStore.DatabaseUrl = NormalizePostgresUrl(config.Memory.VectorStore.DatabaseUrl);
+
         return config;
     }
 
@@ -148,5 +152,65 @@ public static class ConfigLoader
         if (targetType == typeof(float) && float.TryParse(value, out var f)) return f;
         if (targetType == typeof(double) && double.TryParse(value, out var d)) return d;
         return null;
+    }
+
+    /// <summary>
+    /// Converts a PostgreSQL URI (postgres:// or postgresql://) to an Npgsql key-value connection string.
+    /// Npgsql does not accept URI-format strings; it requires Host=...;Database=...;Username=... format.
+    /// </summary>
+    internal static string NormalizePostgresUrl(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return url;
+
+        // Already in key-value format
+        if (url.Contains('=')) return url;
+
+        if (!url.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("postgresql://", StringComparison.OrdinalIgnoreCase))
+            return url;
+
+        // Normalize postgres:// → postgresql:// so Uri can parse the scheme
+        var normalized = url.StartsWith("postgres://", StringComparison.OrdinalIgnoreCase)
+            ? "postgresql://" + url["postgres://".Length..]
+            : url;
+
+        if (!Uri.TryCreate(normalized, UriKind.Absolute, out var uri))
+            return url;
+
+        var parts = new List<string> { $"Host={uri.Host}" };
+
+        if (uri.Port > 0)
+            parts.Add($"Port={uri.Port}");
+
+        if (uri.AbsolutePath.Length > 1)
+            parts.Add($"Database={uri.AbsolutePath.TrimStart('/')}");
+
+        if (!string.IsNullOrEmpty(uri.UserInfo))
+        {
+            var creds = uri.UserInfo.Split(':', 2);
+            parts.Add($"Username={Uri.UnescapeDataString(creds[0])}");
+            if (creds.Length > 1)
+                parts.Add($"Password={Uri.UnescapeDataString(creds[1])}");
+        }
+
+        // Map URI query parameters (e.g. ?sslmode=require)
+        if (!string.IsNullOrEmpty(uri.Query))
+        {
+            foreach (var param in uri.Query.TrimStart('?').Split('&'))
+            {
+                var kv = param.Split('=', 2);
+                if (kv.Length == 2)
+                {
+                    var key = Uri.UnescapeDataString(kv[0]) switch
+                    {
+                        "sslmode" => "SSL Mode",
+                        var k => k
+                    };
+                    parts.Add($"{key}={Uri.UnescapeDataString(kv[1])}");
+                }
+            }
+        }
+
+        return string.Join(";", parts);
     }
 }

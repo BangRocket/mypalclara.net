@@ -249,15 +249,7 @@ public sealed class ChatRepl
 
     private void ShowWelcome()
     {
-        var panel = new Panel(
-            new Markup($"[bold]{_config.Bot.Name.EscapeMarkup()}[/] — .NET CLI\n" +
-                       $"[dim]Model: {_config.Llm.ActiveProvider.Model.EscapeMarkup()}[/]\n" +
-                       $"[dim]Type !help for commands, exit to quit[/]"))
-            .Header("[bold cyan]Clara[/]")
-            .BorderColor(Color.Cyan1)
-            .Padding(1, 0);
-
-        _console.Write(panel);
+        _console.MarkupLine("[dim]Type !help for commands, exit to quit[/]");
         _console.WriteLine();
     }
 }

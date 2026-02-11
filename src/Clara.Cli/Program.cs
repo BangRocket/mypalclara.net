@@ -1,3 +1,4 @@
+using Clara.Cli;
 using Clara.Cli.Repl;
 using Clara.Core.Configuration;
 using Clara.Core.Data;
@@ -27,8 +28,6 @@ var configPath = args.Length > 0 && args[0] == "--config" && args.Length > 1
 var yamlPath = ConfigLoader.ResolveConfigPath(configPath);
 var console = AnsiConsole.Console;
 
-console.MarkupLine($"[dim]Loading config: {yamlPath.EscapeMarkup()}[/]");
-
 ClaraConfig config;
 try
 {
@@ -40,6 +39,7 @@ catch (Exception ex)
     return 1;
 }
 
+Banner.Print(console);
 console.MarkupLine($"[dim]Provider: {config.Llm.Provider.EscapeMarkup()}, Model: {config.Llm.ActiveProvider.Model.EscapeMarkup()}[/]");
 
 // Build host with DI
