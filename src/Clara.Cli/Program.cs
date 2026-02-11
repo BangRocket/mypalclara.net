@@ -22,18 +22,16 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Spectre.Console;
 
-// Resolve config path from CLI args or env
-var configPath = args.Length > 0 && args[0] == "--config" && args.Length > 1
-    ? args[1]
-    : null;
-
-var yamlPath = ConfigLoader.ResolveConfigPath(configPath);
 var console = AnsiConsole.Console;
 
+// Build host with DI — appsettings.json is loaded automatically
+var builder = Host.CreateApplicationBuilder();
+
+// Bind ClaraConfig from the host configuration (appsettings.json + env vars)
 ClaraConfig config;
 try
 {
-    config = ConfigLoader.Load(yamlPath);
+    config = ConfigLoader.Bind(builder.Configuration);
 }
 catch (Exception ex)
 {
@@ -43,9 +41,6 @@ catch (Exception ex)
 
 Banner.Print(console);
 console.MarkupLine($"[dim]Provider: {config.Llm.Provider.EscapeMarkup()}, Model: {config.Llm.ActiveProvider.Model.EscapeMarkup()}[/]");
-
-// Build host with DI
-var builder = Host.CreateApplicationBuilder();
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 builder.Logging.AddFilter("System", LogLevel.Warning);

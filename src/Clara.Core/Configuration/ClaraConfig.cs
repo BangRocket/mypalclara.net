@@ -1,9 +1,10 @@
 namespace Clara.Core.Configuration;
 
-/// <summary>Root configuration POCO that maps to clara.yaml.</summary>
+/// <summary>Root configuration POCO bound from appsettings.json.</summary>
 public sealed class ClaraConfig
 {
     public string UserId { get; set; } = "demo-user";
+    public string? LinkTo { get; set; }
     public string DefaultProject { get; set; } = "Default Project";
     public string DefaultTimezone { get; set; } = "America/New_York";
     public string DataDir { get; set; } = ".";

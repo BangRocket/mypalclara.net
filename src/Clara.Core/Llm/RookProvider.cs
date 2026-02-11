@@ -8,7 +8,7 @@ namespace Clara.Core.Llm;
 /// <summary>
 /// OpenAI-compatible chat completions client for the Rook provider.
 /// Used by FactExtractor, TopicRecurrence, and FalkorDB entity extraction.
-/// Rook is configured separately from the main Anthropic provider (memory.rook.* in clara.yaml).
+/// Rook is configured separately from the main Anthropic provider (Memory:Rook in appsettings.json).
 /// Supports OpenAI, OpenRouter, NanoGPT, and any OpenAI-compatible endpoint.
 /// </summary>
 public sealed class RookProvider

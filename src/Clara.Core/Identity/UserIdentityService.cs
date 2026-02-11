@@ -52,39 +52,81 @@ public sealed class UserIdentityService
 
     /// <summary>
     /// Auto-create CanonicalUser + PlatformLink if none exists (idempotent).
-    /// Called on first message from a new user.
+    /// When <paramref name="linkTo"/> is set, links to the same CanonicalUser as that user
+    /// instead of creating a new one — enabling cross-platform context sharing.
     /// </summary>
-    public async Task EnsurePlatformLinkAsync(string prefixedUserId, string? displayName = null)
+    public async Task EnsurePlatformLinkAsync(string prefixedUserId, string? displayName = null, string? linkTo = null)
     {
         try
         {
             await using var db = await _dbFactory.CreateDbContextAsync();
 
-            var exists = await db.PlatformLinks
-                .AnyAsync(l => l.PrefixedUserId == prefixedUserId);
-            if (exists) return;
+            var existing = await db.PlatformLinks
+                .FirstOrDefaultAsync(l => l.PrefixedUserId == prefixedUserId);
+
+            // If link exists and linkTo is set, re-link if pointing to wrong canonical user
+            if (existing is not null)
+            {
+                if (!string.IsNullOrEmpty(linkTo))
+                {
+                    var targetLink = await db.PlatformLinks
+                        .FirstOrDefaultAsync(l => l.PrefixedUserId == linkTo);
+                    if (targetLink is not null && existing.CanonicalUserId != targetLink.CanonicalUserId)
+                    {
+                        existing.CanonicalUserId = targetLink.CanonicalUserId;
+                        existing.LinkedVia = "config";
+                        await db.SaveChangesAsync();
+                        _logger.LogInformation("Re-linked {UserId} to CanonicalUser via {LinkTo}", prefixedUserId, linkTo);
+                    }
+                }
+                return;
+            }
 
             var parts = prefixedUserId.Split('-', 2);
             var platform = parts.Length > 1 ? parts[0] : "cli";
             var platformUserId = parts.Length > 1 ? parts[1] : prefixedUserId;
             var name = displayName ?? prefixedUserId;
 
-            var canonical = new CanonicalUserEntity { DisplayName = name };
-            db.CanonicalUsers.Add(canonical);
-            await db.SaveChangesAsync();
+            // If linkTo is specified, find that user's CanonicalUser and reuse it
+            string canonicalId;
+            if (!string.IsNullOrEmpty(linkTo))
+            {
+                var targetLink = await db.PlatformLinks
+                    .FirstOrDefaultAsync(l => l.PrefixedUserId == linkTo);
+                if (targetLink is not null)
+                {
+                    canonicalId = targetLink.CanonicalUserId;
+                    _logger.LogInformation("Linking {UserId} to existing CanonicalUser via {LinkTo}", prefixedUserId, linkTo);
+                }
+                else
+                {
+                    _logger.LogWarning("link_to target {LinkTo} not found, creating new CanonicalUser", linkTo);
+                    var canonical = new CanonicalUserEntity { DisplayName = name };
+                    db.CanonicalUsers.Add(canonical);
+                    await db.SaveChangesAsync();
+                    canonicalId = canonical.Id;
+                }
+            }
+            else
+            {
+                var canonical = new CanonicalUserEntity { DisplayName = name };
+                db.CanonicalUsers.Add(canonical);
+                await db.SaveChangesAsync();
+                canonicalId = canonical.Id;
+            }
 
             db.PlatformLinks.Add(new PlatformLinkEntity
             {
-                CanonicalUserId = canonical.Id,
+                CanonicalUserId = canonicalId,
                 Platform = platform,
                 PlatformUserId = platformUserId,
                 PrefixedUserId = prefixedUserId,
                 DisplayName = name,
-                LinkedVia = "auto",
+                LinkedVia = linkTo is not null ? "config" : "auto",
             });
             await db.SaveChangesAsync();
 
-            _logger.LogInformation("Auto-created CanonicalUser + PlatformLink for {UserId}", prefixedUserId);
+            _logger.LogInformation("Auto-created PlatformLink for {UserId}", prefixedUserId);
         }
         catch (Exception ex)
         {

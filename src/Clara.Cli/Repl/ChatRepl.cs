@@ -72,7 +72,7 @@ public sealed class ChatRepl
         // Resolve cross-platform identity (once at startup)
         if (_identity is not null)
         {
-            await _identity.EnsurePlatformLinkAsync(_config.UserId);
+            await _identity.EnsurePlatformLinkAsync(_config.UserId, linkTo: _config.LinkTo);
             _allUserIds = await _identity.ResolveAllUserIdsAsync(_config.UserId);
             _logger.LogDebug("Resolved {Count} linked user IDs for {UserId}", _allUserIds.Count, _config.UserId);
         }
