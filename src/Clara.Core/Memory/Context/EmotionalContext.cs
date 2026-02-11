@@ -146,15 +146,15 @@ public sealed class EmotionalContext
         _sessions.Remove(key);
     }
 
-    /// <summary>Retrieve recent emotional context from vector store.</summary>
-    public async Task<List<string>> RetrieveAsync(string userId, int maxItems = 3, CancellationToken ct = default)
+    /// <summary>Retrieve recent emotional context from vector store (across all linked user IDs).</summary>
+    public async Task<List<string>> RetrieveAsync(IReadOnlyList<string> userIds, int maxItems = 3, CancellationToken ct = default)
     {
         try
         {
             var items = await _vectorStore.GetAllAsync(
                 new Dictionary<string, object?>
                 {
-                    ["user_id"] = userId,
+                    ["user_id"] = userIds.Count == 1 ? userIds[0] : (object)userIds,
                     ["memory_type"] = "emotional_context",
                 },
                 limit: maxItems, ct: ct);

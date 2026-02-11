@@ -2,6 +2,7 @@ using Clara.Cli;
 using Clara.Cli.Repl;
 using Clara.Core.Configuration;
 using Clara.Core.Data;
+using Clara.Core.Identity;
 using Clara.Core.Llm;
 using Clara.Core.Mcp;
 using Clara.Core.Memory;
@@ -76,11 +77,12 @@ builder.Services.AddHttpClient<EmbeddingClient>();
 // --- Vector store ---
 builder.Services.AddSingleton<IVectorStore, PgVectorStore>();
 
-// --- EF Core (FSRS tables) ---
+// --- EF Core (FSRS tables + identity) ---
 if (!string.IsNullOrEmpty(config.Database.Url))
 {
     builder.Services.AddDbContextFactory<ClaraDbContext>(options =>
         options.UseNpgsql(config.Database.Url));
+    builder.Services.AddSingleton<UserIdentityService>();
 }
 
 // --- FSRS / memory dynamics ---

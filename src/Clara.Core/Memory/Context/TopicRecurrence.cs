@@ -105,16 +105,16 @@ public sealed class TopicRecurrence
         _logger.LogDebug("Stored topic mention: {Topic} (id={Id})", topic.Topic, id);
     }
 
-    /// <summary>Retrieve recurring topics (topics with >= 2 mentions in last 14 days).</summary>
+    /// <summary>Retrieve recurring topics across linked user IDs (topics with >= 2 mentions in last 14 days).</summary>
     public async Task<List<string>> GetRecurringTopicsAsync(
-        string userId, int maxTopics = 3, CancellationToken ct = default)
+        IReadOnlyList<string> userIds, int maxTopics = 3, CancellationToken ct = default)
     {
         try
         {
             var items = await _vectorStore.GetAllAsync(
                 new Dictionary<string, object?>
                 {
-                    ["user_id"] = userId,
+                    ["user_id"] = userIds.Count == 1 ? userIds[0] : (object)userIds,
                     ["memory_type"] = "topic_mention",
                 },
                 limit: 100, ct: ct);

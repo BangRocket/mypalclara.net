@@ -74,7 +74,7 @@ public sealed class SmartIngest
 
             // Similar but not contradictory — update (treat as reinforcement)
             _logger.LogDebug("Similar memory reinforced: {Id}", best.Id);
-            await _dynamics.PromoteAsync(best.Id, userId, Grade.Good, "implicit_reference");
+            await _dynamics.PromoteAsync(best.Id, [userId], Grade.Good, "implicit_reference");
             return new IngestResult(IngestAction.Reinforced, "Existing memory reinforced");
         }
 
@@ -125,7 +125,7 @@ public sealed class SmartIngest
         var result = await CreateNewMemoryAsync(fact, userId, embedding, ct);
 
         // Demote old memory
-        await _dynamics.DemoteAsync(oldMemory.Id, userId);
+        await _dynamics.DemoteAsync(oldMemory.Id, [userId]);
 
         // Record supersession
         if (result.MemoryId is not null)

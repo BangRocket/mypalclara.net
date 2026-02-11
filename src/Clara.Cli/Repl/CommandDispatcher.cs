@@ -15,6 +15,9 @@ public sealed class CommandDispatcher
     private readonly ClaraConfig _config;
     private readonly IAnsiConsole _console;
 
+    /// <summary>Resolved linked user IDs for READ queries. Set by ChatRepl after identity resolution.</summary>
+    public IReadOnlyList<string> UserIds { get; set; } = [];
+
     public CommandDispatcher(
         McpServerManager mcp, ClaraConfig config, IAnsiConsole console,
         MemoryService? memory = null, IGraphStore? graphStore = null)
@@ -24,6 +27,7 @@ public sealed class CommandDispatcher
         _graphStore = graphStore;
         _config = config;
         _console = console;
+        UserIds = [config.UserId];
     }
 
     /// <summary>Try to dispatch a command. Returns true if handled.</summary>
@@ -139,7 +143,7 @@ public sealed class CommandDispatcher
         switch (subCmd)
         {
             case "search" when !string.IsNullOrEmpty(query):
-                var results = await _memory.SearchAsync(query, _config.UserId);
+                var results = await _memory.SearchAsync(query, UserIds);
                 if (results.Count == 0)
                 {
                     _console.MarkupLine("[dim]No memories found.[/]");
@@ -160,7 +164,7 @@ public sealed class CommandDispatcher
                 break;
 
             case "key":
-                var keyMemories = await _memory.GetKeyMemoriesAsync(_config.UserId);
+                var keyMemories = await _memory.GetKeyMemoriesAsync(UserIds);
                 if (keyMemories.Count == 0)
                 {
                     _console.MarkupLine("[dim]No key memories found.[/]");
@@ -188,7 +192,7 @@ public sealed class CommandDispatcher
             return;
         }
 
-        var results = await _graphStore.SearchAsync(query, _config.UserId);
+        var results = await _graphStore.SearchAsync(query, UserIds);
         if (results.Count == 0)
         {
             _console.MarkupLine("[dim]No graph relationships found.[/]");

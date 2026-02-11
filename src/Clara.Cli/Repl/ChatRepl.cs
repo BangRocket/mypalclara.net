@@ -1,4 +1,5 @@
 using Clara.Core.Configuration;
+using Clara.Core.Identity;
 using Clara.Core.Llm;
 using Clara.Core.Mcp;
 using Clara.Core.Memory;
@@ -17,10 +18,14 @@ public sealed class ChatRepl
     private readonly McpServerManager _mcpManager;
     private readonly PersonalityLoader _personality;
     private readonly MemoryService? _memory;
+    private readonly UserIdentityService? _identity;
     private readonly CommandDispatcher _commands;
     private readonly StreamingRenderer _renderer;
     private readonly IAnsiConsole _console;
     private readonly ILogger<ChatRepl> _logger;
+
+    // Resolved linked user IDs (set once in RunAsync)
+    private IReadOnlyList<string> _allUserIds = [];
 
     // Conversation history (last N messages)
     private const int ContextMessageCount = 15;
@@ -43,7 +48,8 @@ public sealed class ChatRepl
         StreamingRenderer renderer,
         IAnsiConsole console,
         ILogger<ChatRepl> logger,
-        MemoryService? memory = null)
+        MemoryService? memory = null,
+        UserIdentityService? identity = null)
     {
         _config = config;
         _orchestrator = orchestrator;
@@ -54,10 +60,26 @@ public sealed class ChatRepl
         _console = console;
         _logger = logger;
         _memory = memory;
+        _identity = identity;
     }
 
     public async Task RunAsync(CancellationToken ct = default)
     {
+        // Resolve cross-platform identity (once at startup)
+        if (_identity is not null)
+        {
+            await _identity.EnsurePlatformLinkAsync(_config.UserId);
+            _allUserIds = await _identity.ResolveAllUserIdsAsync(_config.UserId);
+            _logger.LogDebug("Resolved {Count} linked user IDs for {UserId}", _allUserIds.Count, _config.UserId);
+        }
+        else
+        {
+            _allUserIds = [_config.UserId];
+        }
+
+        // Share resolved IDs with command dispatcher
+        _commands.UserIds = _allUserIds;
+
         ShowWelcome();
 
         while (!ct.IsCancellationRequested)
@@ -124,7 +146,7 @@ public sealed class ChatRepl
         {
             try
             {
-                memoryCtx = await _memory.FetchContextAsync(input, _config.UserId, ct);
+                memoryCtx = await _memory.FetchContextAsync(input, _allUserIds, ct);
             }
             catch (Exception ex)
             {
@@ -212,7 +234,7 @@ public sealed class ChatRepl
                         var usedIds = memoryCtx.RelevantMemories
                             .Concat(memoryCtx.KeyMemories)
                             .Select(m => m.Id);
-                        await _memory.PromoteUsedMemoriesAsync(usedIds, _config.UserId, ct);
+                        await _memory.PromoteUsedMemoriesAsync(usedIds, _allUserIds, ct);
                     }
                 }
                 catch (Exception ex)

@@ -1,7 +1,9 @@
+using System.Collections;
 using System.Text.Json;
 using Clara.Core.Configuration;
 using Microsoft.Extensions.Logging;
 using Npgsql;
+using NpgsqlTypes;
 using PgVector = Pgvector.Vector;
 
 namespace Clara.Core.Memory.Vector;
@@ -60,15 +62,7 @@ public sealed class PgVectorStore : IVectorStore
         var parameters = new List<NpgsqlParameter> { new() { Value = vec } };
         int paramIdx = 2;
 
-        if (filters is not null)
-        {
-            foreach (var (key, value) in filters)
-            {
-                sql += $" AND payload->>'{key}' = ${paramIdx}";
-                parameters.Add(new NpgsqlParameter { Value = value?.ToString() ?? "" });
-                paramIdx++;
-            }
-        }
+        AppendFilters(filters, ref sql, parameters, ref paramIdx);
 
         sql += $" ORDER BY vector <=> $1::vector LIMIT {limit}";
 
@@ -118,7 +112,7 @@ public sealed class PgVectorStore : IVectorStore
         await using var cmd = new NpgsqlCommand(sql, conn);
         cmd.Parameters.AddWithValue(Guid.Parse(id));
         cmd.Parameters.Add(new NpgsqlParameter { Value = vec });
-        cmd.Parameters.AddWithValue(NpgsqlTypes.NpgsqlDbType.Jsonb, payloadJson);
+        cmd.Parameters.AddWithValue(NpgsqlDbType.Jsonb, payloadJson);
 
         await cmd.ExecuteNonQueryAsync(ct);
     }
@@ -144,15 +138,7 @@ public sealed class PgVectorStore : IVectorStore
         var parameters = new List<NpgsqlParameter>();
         int paramIdx = 1;
 
-        if (filters is not null)
-        {
-            foreach (var (key, value) in filters)
-            {
-                sql += $" AND payload->>'{key}' = ${paramIdx}";
-                parameters.Add(new NpgsqlParameter { Value = value?.ToString() ?? "" });
-                paramIdx++;
-            }
-        }
+        AppendFilters(filters, ref sql, parameters, ref paramIdx);
 
         sql += $" LIMIT {limit}";
 
@@ -179,6 +165,41 @@ public sealed class PgVectorStore : IVectorStore
         }
 
         return items;
+    }
+
+    /// <summary>
+    /// Append JSONB filter clauses. Supports both single-value (=) and list-value (ANY) filters
+    /// for cross-platform user identity queries.
+    /// </summary>
+    private static void AppendFilters(
+        Dictionary<string, object?>? filters, ref string sql,
+        List<NpgsqlParameter> parameters, ref int paramIdx)
+    {
+        if (filters is null) return;
+
+        foreach (var (key, value) in filters)
+        {
+            if (value is IEnumerable<string> list)
+            {
+                var arr = list.ToArray();
+                if (arr.Length == 1)
+                {
+                    sql += $" AND payload->>'{key}' = ${paramIdx}";
+                    parameters.Add(new NpgsqlParameter { Value = arr[0] });
+                }
+                else
+                {
+                    sql += $" AND payload->>'{key}' = ANY(${paramIdx})";
+                    parameters.Add(new NpgsqlParameter { Value = arr, NpgsqlDbType = NpgsqlDbType.Array | NpgsqlDbType.Text });
+                }
+            }
+            else
+            {
+                sql += $" AND payload->>'{key}' = ${paramIdx}";
+                parameters.Add(new NpgsqlParameter { Value = value?.ToString() ?? "" });
+            }
+            paramIdx++;
+        }
     }
 
     private async Task EnsureTableAsync(NpgsqlConnection conn, CancellationToken ct)

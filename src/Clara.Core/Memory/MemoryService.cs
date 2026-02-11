@@ -12,6 +12,8 @@ namespace Clara.Core.Memory;
 /// <summary>
 /// Top-level memory orchestrator. Port of clara_core/memory_manager.py:MemoryManager.
 /// Ties together vector store, FSRS, graph, emotional context, and topic recurrence.
+/// READ methods accept IReadOnlyList&lt;string&gt; userIds for cross-platform identity.
+/// WRITE methods use single userId (platform-specific).
 /// </summary>
 public sealed class MemoryService
 {
@@ -56,27 +58,30 @@ public sealed class MemoryService
     }
 
     /// <summary>
-    /// Fetch all memory context for a query. Returns assembled prompt sections.
+    /// Fetch all memory context for a query across linked user IDs.
     /// Runs parallel: key memories, vector search, graph, emotional, topics.
     /// </summary>
-    public async Task<MemoryContext> FetchContextAsync(string query, string userId, CancellationToken ct = default)
+    public async Task<MemoryContext> FetchContextAsync(string query, IReadOnlyList<string> userIds, CancellationToken ct = default)
     {
         var embedding = await _embeddingClient.EmbedAsync(query, ct);
 
+        // Build user filter — single string or list depending on count
+        object userFilter = userIds.Count == 1 ? userIds[0] : (object)userIds;
+
         // Parallel retrieval — core
         var keyMemoriesTask = _vectorStore.GetAllAsync(
-            new Dictionary<string, object?> { ["user_id"] = userId, ["is_key"] = "true" },
+            new Dictionary<string, object?> { ["user_id"] = userFilter, ["is_key"] = "true" },
             limit: 15, ct: ct);
 
         var searchTask = _vectorStore.SearchAsync(
             embedding,
-            new Dictionary<string, object?> { ["user_id"] = userId },
+            new Dictionary<string, object?> { ["user_id"] = userFilter },
             limit: 35, ct: ct);
 
         // Parallel retrieval — optional subsystems
-        var graphTask = _graphStore?.SearchAsync(query, userId, embedding, ct: ct);
-        var emotionalTask = _emotionalContext?.RetrieveAsync(userId, ct: ct);
-        var topicsTask = _topicRecurrence?.GetRecurringTopicsAsync(userId, ct: ct);
+        var graphTask = _graphStore?.SearchAsync(query, userIds, embedding, ct: ct);
+        var emotionalTask = _emotionalContext?.RetrieveAsync(userIds, ct: ct);
+        var topicsTask = _topicRecurrence?.GetRecurringTopicsAsync(userIds, ct: ct);
 
         // Await all
         await Task.WhenAll(
@@ -90,7 +95,7 @@ public sealed class MemoryService
         var searchResults = await searchTask;
 
         // FSRS re-rank search results
-        searchResults = await _scorer.RankAsync(searchResults, userId);
+        searchResults = await _scorer.RankAsync(searchResults, userIds);
 
         var graphRelations = graphTask is not null ? await graphTask : [];
         var emotionalCtx = emotionalTask is not null ? await emotionalTask : [];
@@ -158,7 +163,7 @@ public sealed class MemoryService
         return sections;
     }
 
-    /// <summary>Store new memories from a conversation (background, post-response).</summary>
+    /// <summary>Store new memories from a conversation (background, post-response). WRITE — single userId.</summary>
     public async Task AddAsync(string userMessage, string assistantResponse, string userId, CancellationToken ct = default)
     {
         // Fact extraction + smart ingest
@@ -208,13 +213,13 @@ public sealed class MemoryService
         }
     }
 
-    /// <summary>Track emotional sentiment for a message.</summary>
+    /// <summary>Track emotional sentiment for a message. WRITE — single userId.</summary>
     public void TrackSentiment(string userId, string channelId, string message)
     {
         _emotionalContext?.TrackMessage(userId, channelId, message);
     }
 
-    /// <summary>Finalize and persist emotional context for a session (call on exit/idle).</summary>
+    /// <summary>Finalize and persist emotional context for a session. WRITE — single userId.</summary>
     public async Task FinalizeSessionAsync(string userId, string channelId, CancellationToken ct = default)
     {
         if (_emotionalContext is null) return;
@@ -229,14 +234,14 @@ public sealed class MemoryService
         }
     }
 
-    /// <summary>Promote memories that were used in a response.</summary>
-    public async Task PromoteUsedMemoriesAsync(IEnumerable<string> memoryIds, string userId, CancellationToken ct = default)
+    /// <summary>Promote memories that were used in a response (across linked user IDs).</summary>
+    public async Task PromoteUsedMemoriesAsync(IEnumerable<string> memoryIds, IReadOnlyList<string> userIds, CancellationToken ct = default)
     {
         foreach (var id in memoryIds)
         {
             try
             {
-                await _dynamics.PromoteAsync(id, userId, Grade.Good, "used_in_response");
+                await _dynamics.PromoteAsync(id, userIds, Grade.Good, "used_in_response");
             }
             catch (Exception ex)
             {
@@ -245,23 +250,25 @@ public sealed class MemoryService
         }
     }
 
-    /// <summary>Search memories (for !memory search command).</summary>
-    public async Task<List<MemoryItem>> SearchAsync(string query, string userId, int limit = 10, CancellationToken ct = default)
+    /// <summary>Search memories across linked user IDs (for !memory search command).</summary>
+    public async Task<List<MemoryItem>> SearchAsync(string query, IReadOnlyList<string> userIds, int limit = 10, CancellationToken ct = default)
     {
+        object userFilter = userIds.Count == 1 ? userIds[0] : (object)userIds;
         var embedding = await _embeddingClient.EmbedAsync(query, ct);
         var results = await _vectorStore.SearchAsync(
             embedding,
-            new Dictionary<string, object?> { ["user_id"] = userId },
+            new Dictionary<string, object?> { ["user_id"] = userFilter },
             limit: limit, ct: ct);
 
-        return await _scorer.RankAsync(results, userId);
+        return await _scorer.RankAsync(results, userIds);
     }
 
-    /// <summary>Get key memories (for !memory key command).</summary>
-    public Task<List<MemoryItem>> GetKeyMemoriesAsync(string userId, CancellationToken ct = default)
+    /// <summary>Get key memories across linked user IDs (for !memory key command).</summary>
+    public Task<List<MemoryItem>> GetKeyMemoriesAsync(IReadOnlyList<string> userIds, CancellationToken ct = default)
     {
+        object userFilter = userIds.Count == 1 ? userIds[0] : (object)userIds;
         return _vectorStore.GetAllAsync(
-            new Dictionary<string, object?> { ["user_id"] = userId, ["is_key"] = "true" },
+            new Dictionary<string, object?> { ["user_id"] = userFilter, ["is_key"] = "true" },
             limit: 50, ct: ct);
     }
 }

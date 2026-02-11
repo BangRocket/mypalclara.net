@@ -19,14 +19,14 @@ public sealed class CompositeScorer
         _logger = logger;
     }
 
-    /// <summary>Re-rank a list of memory items using FSRS composite scoring.</summary>
-    public async Task<List<MemoryItem>> RankAsync(List<MemoryItem> items, string userId)
+    /// <summary>Re-rank a list of memory items using FSRS composite scoring (across linked user IDs).</summary>
+    public async Task<List<MemoryItem>> RankAsync(List<MemoryItem> items, IReadOnlyList<string> userIds)
     {
         if (items.Count == 0) return items;
 
-        // Batch-load FSRS data
+        // Batch-load FSRS data across all linked user IDs
         var memoryIds = items.Select(i => i.Id);
-        var dynamics = await _dynamicsService.BatchGetAsync(memoryIds, userId);
+        var dynamics = await _dynamicsService.BatchGetAsync(memoryIds, userIds);
 
         var now = DateTime.UtcNow;
 

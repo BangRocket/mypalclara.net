@@ -11,6 +11,8 @@ public class ClaraDbContext : DbContext
     public DbSet<MemoryDynamicsEntity> MemoryDynamics => Set<MemoryDynamicsEntity>();
     public DbSet<MemoryAccessLogEntity> MemoryAccessLog => Set<MemoryAccessLogEntity>();
     public DbSet<MemorySupersessionEntity> MemorySupersessions => Set<MemorySupersessionEntity>();
+    public DbSet<CanonicalUserEntity> CanonicalUsers => Set<CanonicalUserEntity>();
+    public DbSet<PlatformLinkEntity> PlatformLinks => Set<PlatformLinkEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +38,22 @@ public class ClaraDbContext : DbContext
             e.HasIndex(x => x.OldMemoryId);
             e.HasIndex(x => x.NewMemoryId);
             e.HasIndex(x => x.UserId);
+        });
+
+        // CanonicalUser
+        modelBuilder.Entity<CanonicalUserEntity>(e =>
+        {
+            e.HasIndex(x => x.PrimaryEmail).IsUnique();
+        });
+
+        // PlatformLink
+        modelBuilder.Entity<PlatformLinkEntity>(e =>
+        {
+            e.HasIndex(x => x.PrefixedUserId).IsUnique();
+            e.HasIndex(x => new { x.Platform, x.PlatformUserId }).IsUnique();
+            e.HasOne(x => x.CanonicalUser!)
+                .WithMany(x => x.PlatformLinks)
+                .HasForeignKey(x => x.CanonicalUserId);
         });
     }
 }

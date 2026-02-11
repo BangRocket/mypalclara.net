@@ -52,18 +52,18 @@ public sealed class FalkorDbStore : IGraphStore
     }
 
     public async Task<List<string>> SearchAsync(
-        string query, string userId, float[]? embedding = null,
+        string query, IReadOnlyList<string> userIds, float[]? embedding = null,
         int limit = 20, CancellationToken ct = default)
     {
         try
         {
             var db = await GetDbAsync();
-            var escapedUserId = EscapeCypher(userId);
+            var userIdFilter = BuildUserIdFilter(userIds);
             var escapedQuery = EscapeCypher(query);
 
             var cypher = $$"""
-                MATCH (n:__Entity__ {user_id: '{{escapedUserId}}'})
-                WHERE toLower(n.name) CONTAINS toLower('{{escapedQuery}}')
+                MATCH (n:__Entity__)
+                WHERE n.user_id IN [{{userIdFilter}}] AND toLower(n.name) CONTAINS toLower('{{escapedQuery}}')
                 CALL {
                     WITH n
                     MATCH (n)-[r]->(m:__Entity__)
@@ -81,7 +81,7 @@ public sealed class FalkorDbStore : IGraphStore
 
             // If no results from name search, get all relationships for user
             if (results.Count == 0)
-                results = await GetAllAsync(userId, limit, ct);
+                results = await GetAllAsync(userIds, limit, ct);
 
             return results;
         }
@@ -126,15 +126,16 @@ public sealed class FalkorDbStore : IGraphStore
         }
     }
 
-    public async Task<List<string>> GetAllAsync(string userId, int limit = 50, CancellationToken ct = default)
+    public async Task<List<string>> GetAllAsync(IReadOnlyList<string> userIds, int limit = 50, CancellationToken ct = default)
     {
         try
         {
             var db = await GetDbAsync();
-            var escapedUserId = EscapeCypher(userId);
+            var userIdFilter = BuildUserIdFilter(userIds);
 
             var cypher = $$"""
-                MATCH (n:__Entity__ {user_id: '{{escapedUserId}}'})-[r]->(m:__Entity__)
+                MATCH (n:__Entity__)-[r]->(m:__Entity__)
+                WHERE n.user_id IN [{{userIdFilter}}]
                 RETURN n.name AS source, type(r) AS rel, m.name AS target
                 LIMIT {{limit}}
                 """;
@@ -147,6 +148,10 @@ public sealed class FalkorDbStore : IGraphStore
             return [];
         }
     }
+
+    /// <summary>Build a Cypher-compatible list of quoted, escaped user IDs.</summary>
+    private static string BuildUserIdFilter(IReadOnlyList<string> userIds)
+        => string.Join(", ", userIds.Select(id => $"'{EscapeCypher(id)}'"));
 
     /// <summary>LLM-based entity/relationship extraction, then Cypher MERGE.</summary>
     private async Task ExtractAndStoreEntitiesAsync(

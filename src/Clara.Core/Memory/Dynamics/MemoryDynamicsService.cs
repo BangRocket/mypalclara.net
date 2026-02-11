@@ -39,15 +39,17 @@ public sealed class MemoryDynamicsService
         return entity;
     }
 
-    /// <summary>Batch-get FSRS data for multiple memory IDs (single query).</summary>
+    /// <summary>Batch-get FSRS data for multiple memory IDs across linked user IDs.</summary>
     public async Task<Dictionary<string, MemoryDynamicsEntity>> BatchGetAsync(
-        IEnumerable<string> memoryIds, string userId)
+        IEnumerable<string> memoryIds, IReadOnlyList<string> userIds)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
         var ids = memoryIds.ToHashSet();
 
         var entities = await db.MemoryDynamics
-            .Where(e => ids.Contains(e.MemoryId) && e.UserId == userId)
+            .Where(e => ids.Contains(e.MemoryId) && userIds.Contains(e.UserId))
+            .GroupBy(e => e.MemoryId)
+            .Select(g => g.First())
             .ToDictionaryAsync(e => e.MemoryId);
 
         return entities;
@@ -55,17 +57,19 @@ public sealed class MemoryDynamicsService
 
     /// <summary>
     /// Promote a memory: run FSRS review cycle, update state, log access.
+    /// Searches across all linked user IDs, creates under primary (first) user ID.
     /// </summary>
-    public async Task PromoteAsync(string memoryId, string userId, Grade grade, string signalType)
+    public async Task PromoteAsync(string memoryId, IReadOnlyList<string> userIds, Grade grade, string signalType)
     {
         await using var db = await _dbFactory.CreateDbContextAsync();
+        var primaryUserId = userIds[0];
 
         var entity = await db.MemoryDynamics
-            .FirstOrDefaultAsync(e => e.MemoryId == memoryId && e.UserId == userId);
+            .FirstOrDefaultAsync(e => e.MemoryId == memoryId && userIds.Contains(e.UserId));
 
         if (entity is null)
         {
-            entity = new MemoryDynamicsEntity { MemoryId = memoryId, UserId = userId };
+            entity = new MemoryDynamicsEntity { MemoryId = memoryId, UserId = primaryUserId };
             db.MemoryDynamics.Add(entity);
         }
 
@@ -104,7 +108,7 @@ public sealed class MemoryDynamicsService
         db.MemoryAccessLog.Add(new MemoryAccessLogEntity
         {
             MemoryId = memoryId,
-            UserId = userId,
+            UserId = primaryUserId,
             Grade = (int)grade,
             SignalType = signalType,
             RetrievabilityAtAccess = currentR,
@@ -118,8 +122,8 @@ public sealed class MemoryDynamicsService
     }
 
     /// <summary>Demote a memory (grade = Again).</summary>
-    public Task DemoteAsync(string memoryId, string userId)
-        => PromoteAsync(memoryId, userId, Grade.Again, "contradiction_detected");
+    public Task DemoteAsync(string memoryId, IReadOnlyList<string> userIds)
+        => PromoteAsync(memoryId, userIds, Grade.Again, "contradiction_detected");
 
     /// <summary>Record a memory supersession.</summary>
     public async Task RecordSupersessionAsync(
