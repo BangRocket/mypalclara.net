@@ -12,29 +12,32 @@ namespace Clara.Core.Memory.Vector;
 /// </summary>
 public sealed class PgVectorStore : IVectorStore
 {
-    private readonly string _connectionString;
+    private readonly NpgsqlDataSource _dataSource;
     private readonly string _tableName;
     private readonly ILogger<PgVectorStore> _logger;
+    private bool _extensionEnsured;
 
     public PgVectorStore(ClaraConfig config, ILogger<PgVectorStore> logger)
     {
-        _connectionString = config.Memory.VectorStore.DatabaseUrl;
+        var dsBuilder = new NpgsqlDataSourceBuilder(config.Memory.VectorStore.DatabaseUrl);
+        dsBuilder.UseVector();
+        _dataSource = dsBuilder.Build();
         _tableName = config.Memory.VectorStore.CollectionName;
         _logger = logger;
     }
 
     private async Task<NpgsqlConnection> OpenConnectionAsync(CancellationToken ct)
     {
-        var conn = new NpgsqlConnection(_connectionString);
-        await conn.OpenAsync(ct);
+        var conn = await _dataSource.OpenConnectionAsync(ct);
 
-        // Ensure pgvector extension
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "CREATE EXTENSION IF NOT EXISTS vector";
-        await cmd.ExecuteNonQueryAsync(ct);
-
-        // Reload types so Npgsql recognizes the vector type
-        await conn.ReloadTypesAsync(ct);
+        if (!_extensionEnsured)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = "CREATE EXTENSION IF NOT EXISTS vector";
+            await cmd.ExecuteNonQueryAsync(ct);
+            await conn.ReloadTypesAsync(ct);
+            _extensionEnsured = true;
+        }
 
         return conn;
     }
