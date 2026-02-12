@@ -1,4 +1,5 @@
 using Clara.Cli;
+using Clara.Cli.Discord;
 using Clara.Cli.Voice;
 using Microsoft.Extensions.Configuration;
 using Clara.Cli.Repl;
@@ -49,8 +50,12 @@ catch (Exception ex)
     return 1;
 }
 
+var discordMode = args.Contains("--discord", StringComparer.OrdinalIgnoreCase) || config.Discord.Enabled;
+
 Banner.Print(console);
 console.MarkupLine($"[dim]Provider: {config.Llm.Provider.EscapeMarkup()}, Model: {config.Llm.ActiveProvider.Model.EscapeMarkup()}[/]");
+if (discordMode)
+    console.MarkupLine("[cyan]Mode: Discord bot[/]");
 builder.Logging.SetMinimumLevel(LogLevel.Information);
 builder.Logging.AddFilter("Microsoft", LogLevel.Warning);
 builder.Logging.AddFilter("System", LogLevel.Warning);
@@ -126,6 +131,15 @@ builder.Services.AddHttpClient<ReplicateTtsSynthesizer>();
 builder.Services.AddSingleton<ITtsSynthesizer>(sp => sp.GetRequiredService<ReplicateTtsSynthesizer>());
 builder.Services.AddSingleton<VoiceManager>();
 
+// --- Discord ---
+if (discordMode)
+{
+    builder.Services.AddSingleton<AttachmentHandler>();
+    builder.Services.AddSingleton<MessageHandler>();
+    builder.Services.AddSingleton<DiscordBotService>();
+    builder.Services.AddHostedService(sp => sp.GetRequiredService<DiscordBotService>());
+}
+
 // --- REPL ---
 builder.Services.AddSingleton<StreamingRenderer>();
 builder.Services.AddSingleton<CommandDispatcher>();
@@ -161,33 +175,41 @@ catch (Exception ex)
     console.MarkupLine($"[yellow]FalkorDB schema warning: {ex.Message.EscapeMarkup()}[/]");
 }
 
-// Initialize MCP servers
-var mcpManager = host.Services.GetRequiredService<McpServerManager>();
-console.MarkupLine("[dim]Initializing MCP servers...[/]");
-
-try
+if (discordMode)
 {
-    var mcpResults = await mcpManager.InitializeAsync();
-    foreach (var (name, ok) in mcpResults)
+    // Discord mode — MCP init is handled by DiscordBotService
+    console.MarkupLine("[dim]Starting Discord bot...[/]");
+    await host.RunAsync();
+}
+else
+{
+    // REPL mode
+    var mcpManager = host.Services.GetRequiredService<McpServerManager>();
+    console.MarkupLine("[dim]Initializing MCP servers...[/]");
+
+    try
     {
-        var status = ok ? "[green]OK[/]" : "[red]FAIL[/]";
-        console.MarkupLine($"  {status} {name.EscapeMarkup()}");
+        var mcpResults = await mcpManager.InitializeAsync();
+        foreach (var (name, ok) in mcpResults)
+        {
+            var status = ok ? "[green]OK[/]" : "[red]FAIL[/]";
+            console.MarkupLine($"  {status} {name.EscapeMarkup()}");
+        }
     }
-}
-catch (Exception ex)
-{
-    console.MarkupLine($"[yellow]MCP init warning: {ex.Message.EscapeMarkup()}[/]");
-}
+    catch (Exception ex)
+    {
+        console.MarkupLine($"[yellow]MCP init warning: {ex.Message.EscapeMarkup()}[/]");
+    }
 
-// Run REPL
-var repl = host.Services.GetRequiredService<ChatRepl>();
-try
-{
-    await repl.RunAsync();
-}
-finally
-{
-    await mcpManager.DisposeAsync();
+    var repl = host.Services.GetRequiredService<ChatRepl>();
+    try
+    {
+        await repl.RunAsync();
+    }
+    finally
+    {
+        await mcpManager.DisposeAsync();
+    }
 }
 
 return 0;

@@ -18,4 +18,5 @@ public sealed class ClaraConfig
     public BotSettings Bot { get; set; } = new();
     public McpSettings Mcp { get; set; } = new();
     public VoiceSettings Voice { get; set; } = new();
+    public DiscordSettings Discord { get; set; } = new();
 }
