@@ -12,7 +12,7 @@ public sealed class GraphStoreSettings
 {
     public string Provider { get; set; } = "falkordb";
     public string FalkordbHost { get; set; } = "localhost";
-    public int FalkordbPort { get; set; } = 6380;
+    public int FalkordbPort { get; set; } = 6480;
     public string FalkordbPassword { get; set; } = "";
     public string FalkordbGraphName { get; set; } = "clara_memory";
     public int VectorDimension { get; set; } = 1536;

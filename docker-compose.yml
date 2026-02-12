@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: clara
       POSTGRES_DB: clara
     ports:
-      - "5442:5432"
+      - "5542:5432"
     volumes:
       - clara_pg_data:/var/lib/postgresql/data
 
@@ -15,7 +15,7 @@ services:
     image: falkordb/falkordb:latest
     restart: unless-stopped
     ports:
-      - "6380:6379"
+      - "6480:6379"
     volumes:
       - clara_falkor_data:/data
     command: >
@@ -27,7 +27,7 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "6479:6379"
     volumes:
       - clara_redis_data:/data
 
