@@ -203,12 +203,13 @@ public sealed class BackfillRunner
 
             var exchange = conv.Exchanges[i];
 
-            if (i % 10 == 0 || i == conv.Exchanges.Count - 1)
-            {
-                _logger.LogInformation("  Exchange {Current}/{Total} ({Date:yyyy-MM-dd HH:mm}): \"{Preview}\"",
-                    i + 1, conv.Exchanges.Count, exchange.UserTimestamp,
-                    exchange.UserMessage.Length > 60 ? exchange.UserMessage[..60] + "..." : exchange.UserMessage);
-            }
+            var preview = exchange.UserMessage.Length > 60
+                ? exchange.UserMessage[..60] + "..."
+                : exchange.UserMessage;
+            _logger.LogInformation("  Exchange {Current}/{Total} ({Date:yyyy-MM-dd HH:mm}): \"{Preview}\"",
+                i + 1, conv.Exchanges.Count, exchange.UserTimestamp, preview);
+
+            var stepSw = System.Diagnostics.Stopwatch.StartNew();
 
             // Store in chat history
             if (!options.SkipHistory && conversationId is not null)
@@ -218,20 +219,23 @@ public sealed class BackfillRunner
                     exchange.UserMessage, exchange.AssistantMessage,
                     exchange.UserTimestamp, exchange.AssistantTimestamp,
                     ct);
+                _logger.LogInformation("    History stored ({Elapsed}ms)", stepSw.ElapsedMilliseconds);
             }
 
             // Build memories
             if (!options.SkipMemory)
             {
+                stepSw.Restart();
                 try
                 {
                     await _memory.AddAsync(exchange.UserMessage, exchange.AssistantMessage, userId, ct);
                     memorySuccessCount++;
+                    _logger.LogInformation("    Memory ingested ({Elapsed}ms)", stepSw.ElapsedMilliseconds);
                 }
                 catch (Exception ex)
                 {
                     memoryFailCount++;
-                    _logger.LogDebug(ex, "Memory add failed for exchange {Index} in {SourceId}", i, conv.SourceId);
+                    _logger.LogWarning("    Memory failed ({Elapsed}ms): {Error}", stepSw.ElapsedMilliseconds, ex.Message);
                 }
 
                 // Track sentiment
