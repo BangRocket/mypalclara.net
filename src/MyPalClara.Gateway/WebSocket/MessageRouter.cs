@@ -322,7 +322,7 @@ public sealed class MessageRouter
     {
         if (ws.State != WebSocketState.Open) return;
 
-        var json = JsonSerializer.Serialize(response, response.GetType(), JsonOpts);
+        var json = JsonSerializer.Serialize<GatewayResponse>(response, JsonOpts);
         var bytes = Encoding.UTF8.GetBytes(json);
         await ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
     }

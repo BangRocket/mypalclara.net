@@ -105,7 +105,7 @@ public sealed class GatewayClient : IAsyncDisposable
         if (_ws is null || _ws.State != WebSocketState.Open)
             throw new InvalidOperationException("Not connected to Gateway");
 
-        var json = JsonSerializer.Serialize(message, message.GetType(), JsonOpts);
+        var json = JsonSerializer.Serialize<AdapterMessage>(message, JsonOpts);
         var bytes = Encoding.UTF8.GetBytes(json);
         await _ws.SendAsync(bytes, WebSocketMessageType.Text, true, ct);
     }
