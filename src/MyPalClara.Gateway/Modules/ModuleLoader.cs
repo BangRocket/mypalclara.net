@@ -24,11 +24,7 @@ public static class ModuleLoader
     {
         var modules = new List<IGatewayModule>();
 
-        if (!Directory.Exists(pluginsDir))
-        {
-            logger.LogInformation("Plugins directory not found: {Dir} — no modules loaded", pluginsDir);
-            return modules;
-        }
+        Directory.CreateDirectory(pluginsDir);
 
         foreach (var dll in Directory.GetFiles(pluginsDir, "*.dll"))
         {

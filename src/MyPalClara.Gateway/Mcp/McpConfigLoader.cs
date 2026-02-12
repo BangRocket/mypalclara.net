@@ -24,11 +24,7 @@ public sealed class McpConfigLoader
         var configs = new List<LocalServerConfig>();
         var localDir = Path.Combine(serversDir, "local");
 
-        if (!Directory.Exists(localDir))
-        {
-            _logger.LogWarning("MCP local servers directory not found: {Dir}", localDir);
-            return configs;
-        }
+        Directory.CreateDirectory(localDir);
 
         foreach (var dir in Directory.GetDirectories(localDir))
         {
@@ -63,7 +59,7 @@ public sealed class McpConfigLoader
         var configs = new List<RemoteServerConfig>();
         var remoteDir = Path.Combine(serversDir, "remote");
 
-        if (!Directory.Exists(remoteDir)) return configs;
+        Directory.CreateDirectory(remoteDir);
 
         foreach (var dir in Directory.GetDirectories(remoteDir))
         {
