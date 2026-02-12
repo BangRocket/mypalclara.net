@@ -178,12 +178,19 @@ public sealed class MessageRouter
                 }
             }
 
-            // 4. Fetch memory context
+            // 4. Fetch memory context (best-effort — chat works without it)
             MemoryContext? memoryContext = null;
             if (_memory is not null)
             {
-                var allUserIds = await _identity.ResolveAllUserIdsAsync(prefixedUserId);
-                memoryContext = await _memory.FetchContextAsync(chat.Content, allUserIds, ct);
+                try
+                {
+                    var allUserIds = await _identity.ResolveAllUserIdsAsync(prefixedUserId);
+                    memoryContext = await _memory.FetchContextAsync(chat.Content, allUserIds, ct);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Memory fetch failed — continuing without memory context");
+                }
             }
 
             // 5. Build messages
@@ -268,7 +275,17 @@ public sealed class MessageRouter
 
             if (_memory is not null && !string.IsNullOrWhiteSpace(fullText))
             {
-                _ = _memory.AddAsync(chat.Content, fullText, prefixedUserId, ct);
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _memory.AddAsync(chat.Content, fullText, prefixedUserId, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Background memory ingestion failed");
+                    }
+                }, ct);
             }
         }
         catch (Exception ex)
