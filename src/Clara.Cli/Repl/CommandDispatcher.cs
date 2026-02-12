@@ -1,3 +1,4 @@
+using Clara.Cli.Voice;
 using Clara.Core.Chat;
 using Clara.Core.Configuration;
 using Clara.Core.Mcp;
@@ -15,6 +16,7 @@ public sealed class CommandDispatcher
     private readonly ChatHistoryService? _chatHistory;
     private readonly ClaraConfig _config;
     private readonly IAnsiConsole _console;
+    private readonly VoiceManager? _voice;
 
     /// <summary>Resolved linked user IDs for READ queries. Set by ChatRepl after identity resolution.</summary>
     public IReadOnlyList<string> UserIds { get; set; } = [];
@@ -25,7 +27,7 @@ public sealed class CommandDispatcher
     public CommandDispatcher(
         McpServerManager mcp, ClaraConfig config, IAnsiConsole console,
         MemoryService? memory = null, ISemanticMemoryStore? semanticStore = null,
-        ChatHistoryService? chatHistory = null)
+        ChatHistoryService? chatHistory = null, VoiceManager? voice = null)
     {
         _mcp = mcp;
         _memory = memory;
@@ -33,6 +35,7 @@ public sealed class CommandDispatcher
         _chatHistory = chatHistory;
         _config = config;
         _console = console;
+        _voice = voice;
         UserIds = [config.UserId];
     }
 
@@ -69,6 +72,10 @@ public sealed class CommandDispatcher
                 HandleHistoryCommand().GetAwaiter().GetResult();
                 return true;
 
+            case "voice":
+                HandleVoiceCommand(args);
+                return true;
+
             case "status":
                 ShowStatus();
                 return true;
@@ -97,6 +104,7 @@ public sealed class CommandDispatcher
         table.AddRow("!memory search <query>", "Search memories");
         table.AddRow("!memory key", "Show key memories");
         table.AddRow("!memory graph <query>", "Search graph relationships");
+        table.AddRow("!voice on|off", "Start/stop voice mode");
         table.AddRow("!tier", "Show tier prefix usage");
         table.AddRow("!high <msg>", "Send with high/opus tier");
         table.AddRow("!mid <msg>", "Send with mid/sonnet tier");
@@ -280,10 +288,50 @@ public sealed class CommandDispatcher
         }
     }
 
+    private void HandleVoiceCommand(string args)
+    {
+        if (_voice is null)
+        {
+            _console.MarkupLine("[yellow]Voice not configured (check Voice settings in config).[/]");
+            return;
+        }
+
+        var subCmd = args.Trim().ToLowerInvariant();
+        switch (subCmd)
+        {
+            case "on":
+                if (_voice.IsActive)
+                {
+                    _console.MarkupLine("[dim]Voice mode is already active.[/]");
+                    return;
+                }
+                _voice.Start();
+                _console.MarkupLine("[green]Voice mode activated.[/] Speak into your microphone.");
+                break;
+
+            case "off":
+                if (!_voice.IsActive)
+                {
+                    _console.MarkupLine("[dim]Voice mode is not active.[/]");
+                    return;
+                }
+                _voice.Stop();
+                _console.MarkupLine("[dim]Voice mode deactivated.[/]");
+                break;
+
+            default:
+                var status = _voice.IsActive ? "[green]active[/]" : "[dim]inactive[/]";
+                _console.MarkupLine($"[bold]Voice:[/] {status}");
+                _console.MarkupLine("[dim]Usage: !voice on | !voice off[/]");
+                break;
+        }
+    }
+
     private void ShowStatus()
     {
         var status = _mcp.GetServerStatus();
         _console.MarkupLine($"[bold]MCP Servers:[/] {status.Count} connected, {status.Values.Sum()} tools");
         _console.MarkupLine($"[bold]Memory:[/] {(_memory is not null ? "connected" : "not configured")}");
+        _console.MarkupLine($"[bold]Voice:[/] {(_voice?.IsActive == true ? "active" : "inactive")}");
     }
 }

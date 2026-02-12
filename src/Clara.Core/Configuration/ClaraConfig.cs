@@ -17,4 +17,5 @@ public sealed class ClaraConfig
     public GatewaySettings Gateway { get; set; } = new();
     public BotSettings Bot { get; set; } = new();
     public McpSettings Mcp { get; set; } = new();
+    public VoiceSettings Voice { get; set; } = new();
 }

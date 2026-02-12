@@ -1,3 +1,4 @@
+using Clara.Cli.Voice;
 using Clara.Core.Chat;
 using Clara.Core.Configuration;
 using Clara.Core.Identity;
@@ -21,6 +22,7 @@ public sealed class ChatRepl
     private readonly MemoryService? _memory;
     private readonly UserIdentityService? _identity;
     private readonly ChatHistoryService? _chatHistory;
+    private readonly VoiceManager? _voice;
     private readonly CommandDispatcher _commands;
     private readonly StreamingRenderer _renderer;
     private readonly IAnsiConsole _console;
@@ -53,7 +55,8 @@ public sealed class ChatRepl
         ILogger<ChatRepl> logger,
         MemoryService? memory = null,
         UserIdentityService? identity = null,
-        ChatHistoryService? chatHistory = null)
+        ChatHistoryService? chatHistory = null,
+        VoiceManager? voice = null)
     {
         _config = config;
         _orchestrator = orchestrator;
@@ -66,6 +69,11 @@ public sealed class ChatRepl
         _memory = memory;
         _identity = identity;
         _chatHistory = chatHistory;
+        _voice = voice;
+
+        // Wire voice transcription callback
+        if (_voice is not null)
+            _voice.OnTranscription = OnVoiceTranscriptionAsync;
     }
 
     public async Task RunAsync(CancellationToken ct = default)
@@ -241,6 +249,12 @@ public sealed class ChatRepl
                         _console.Write(new Markup("[bold cyan]" + _config.Bot.Name + ":[/] "));
                     }
                     fullText = complete.FullText;
+
+                    // TTS: synthesize and play if voice is active
+                    if (_voice?.IsActive == true && !string.IsNullOrEmpty(fullText))
+                    {
+                        _ = _voice.SpeakAsync(fullText, ct);
+                    }
                     break;
             }
         }
@@ -319,6 +333,20 @@ public sealed class ChatRepl
         messages.Add(new UserMessage(currentInput));
 
         return messages;
+    }
+
+    private async Task OnVoiceTranscriptionAsync(string text)
+    {
+        _console.MarkupLine($"[dim]You (voice):[/] {text.EscapeMarkup()}");
+        try
+        {
+            await ProcessMessageAsync(text, tier: null, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error processing voice input");
+            _renderer.ShowError($"Error: {ex.Message}");
+        }
     }
 
     private void ShowWelcome()

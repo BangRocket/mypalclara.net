@@ -1,4 +1,5 @@
 using Clara.Cli;
+using Clara.Cli.Voice;
 using Microsoft.Extensions.Configuration;
 using Clara.Cli.Repl;
 using Clara.Core.Chat;
@@ -14,6 +15,7 @@ using Clara.Core.Memory.Dynamics;
 using Clara.Core.Memory.Extraction;
 using Clara.Core.Orchestration;
 using Clara.Core.Personality;
+using Clara.Core.Voice;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Microsoft.Extensions.DependencyInjection;
@@ -116,6 +118,13 @@ builder.Services.AddSingleton<MemoryCache>();
 
 // --- Memory service (top-level orchestrator) ---
 builder.Services.AddSingleton<MemoryService>();
+
+// --- Voice ---
+builder.Services.AddHttpClient<WhisperTranscriber>();
+builder.Services.AddSingleton<ITranscriber>(sp => sp.GetRequiredService<WhisperTranscriber>());
+builder.Services.AddHttpClient<ReplicateTtsSynthesizer>();
+builder.Services.AddSingleton<ITtsSynthesizer>(sp => sp.GetRequiredService<ReplicateTtsSynthesizer>());
+builder.Services.AddSingleton<VoiceManager>();
 
 // --- REPL ---
 builder.Services.AddSingleton<StreamingRenderer>();
