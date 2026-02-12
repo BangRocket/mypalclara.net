@@ -7,3 +7,7 @@ obj/
 appsettings.json
 appsettings.*.json
 !appsettings.example.json
+
+chats/
+
+.DS_Store

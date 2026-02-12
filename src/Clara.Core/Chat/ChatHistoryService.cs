@@ -199,6 +199,141 @@ public sealed class ChatHistoryService
         }
     }
 
+    /// <summary>Generic adapter/channel creation for any adapter type (backfill, external integrations).</summary>
+    public async Task<(Guid AdapterId, Guid ChannelId)?> EnsureChannelAsync(
+        string adapterType, string adapterName,
+        string externalId, string channelName, string channelType,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            var adapter = await db.Adapters
+                .FirstOrDefaultAsync(a => a.Type == adapterType, ct);
+
+            if (adapter is null)
+            {
+                adapter = new AdapterEntity { Type = adapterType, Name = adapterName };
+                db.Adapters.Add(adapter);
+                await db.SaveChangesAsync(ct);
+            }
+
+            var channel = await db.Channels
+                .FirstOrDefaultAsync(c => c.AdapterId == adapter.Id && c.ExternalId == externalId, ct);
+
+            if (channel is null)
+            {
+                channel = new ChannelEntity
+                {
+                    AdapterId = adapter.Id,
+                    ExternalId = externalId,
+                    Name = channelName,
+                    ChannelType = channelType,
+                };
+                db.Channels.Add(channel);
+                await db.SaveChangesAsync(ct);
+            }
+
+            return (adapter.Id, channel.Id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "EnsureChannel failed for {AdapterType}/{ExternalId}", adapterType, externalId);
+            return null;
+        }
+    }
+
+    /// <summary>Persist a user/assistant message pair with explicit historical timestamps.</summary>
+    public async Task StoreExchangeAsync(
+        Guid conversationId, Guid? userId,
+        string userMsg, string assistantMsg,
+        DateTime userTimestamp, DateTime assistantTimestamp,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            db.Messages.Add(new MessageEntity
+            {
+                ConversationId = conversationId,
+                UserId = userId,
+                Role = "user",
+                Content = userMsg,
+                CreatedAt = userTimestamp,
+            });
+
+            db.Messages.Add(new MessageEntity
+            {
+                ConversationId = conversationId,
+                UserId = null,
+                Role = "assistant",
+                Content = assistantMsg,
+                CreatedAt = assistantTimestamp,
+            });
+
+            var conversation = await db.Conversations.FindAsync([conversationId], ct);
+            if (conversation is not null)
+                conversation.LastActivityAt = assistantTimestamp;
+
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "StoreExchange (timestamped) failed for conversation {ConversationId}", conversationId);
+        }
+    }
+
+    /// <summary>Create a conversation with a historical StartedAt timestamp (for backfill).</summary>
+    public async Task<Guid?> CreateBackfillConversationAsync(
+        Guid channelId, Guid userId, DateTime startedAt,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+
+            var conversation = new ConversationEntity
+            {
+                ChannelId = channelId,
+                UserId = userId,
+                StartedAt = startedAt,
+                LastActivityAt = startedAt,
+                Archived = true, // historical conversations are archived
+            };
+            db.Conversations.Add(conversation);
+            await db.SaveChangesAsync(ct);
+
+            _logger.LogDebug("Created backfill conversation {ConversationId} at {StartedAt}", conversation.Id, startedAt);
+            return conversation.Id;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "CreateBackfillConversation failed");
+            return null;
+        }
+    }
+
+    /// <summary>Update conversation LastActivityAt (for backfill finalization).</summary>
+    public async Task UpdateConversationActivityAsync(Guid conversationId, DateTime lastActivity, CancellationToken ct = default)
+    {
+        try
+        {
+            await using var db = await _dbFactory.CreateDbContextAsync(ct);
+            var conversation = await db.Conversations.FindAsync([conversationId], ct);
+            if (conversation is not null)
+            {
+                conversation.LastActivityAt = lastActivity;
+                await db.SaveChangesAsync(ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "UpdateConversationActivity failed for {ConversationId}", conversationId);
+        }
+    }
+
     /// <summary>Get or create a CLI adapter and channel for the given user.</summary>
     public async Task<(Guid AdapterId, Guid ChannelId)?> EnsureCliChannelAsync(Guid userId, CancellationToken ct = default)
     {
