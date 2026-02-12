@@ -16,6 +16,7 @@ public class ClaraDbContext : DbContext
     public DbSet<LlmCallEntity> LlmCalls => Set<LlmCallEntity>();
     public DbSet<DiscordGuildEntity> DiscordGuilds => Set<DiscordGuildEntity>();
     public DbSet<DiscordChannelDetailEntity> DiscordChannelDetails => Set<DiscordChannelDetailEntity>();
+    public DbSet<MemoryHistoryEntity> MemoryHistory => Set<MemoryHistoryEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -92,6 +93,14 @@ public class ClaraDbContext : DbContext
             e.HasOne(x => x.Guild)
                 .WithMany()
                 .HasForeignKey(x => x.GuildId);
+        });
+
+        // MemoryHistory
+        modelBuilder.Entity<MemoryHistoryEntity>(e =>
+        {
+            e.HasIndex(x => x.MemoryId);
+            e.HasIndex(x => x.UserId);
+            e.HasIndex(x => x.CreatedAt);
         });
     }
 }

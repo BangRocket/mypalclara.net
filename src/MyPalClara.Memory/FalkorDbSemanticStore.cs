@@ -11,8 +11,7 @@ namespace MyPalClara.Memory;
 
 /// <summary>
 /// Unified semantic memory store backed by FalkorDB.
-/// All memory nodes, FSRS state, access events, supersessions, and entity relationships
-/// live in a single FalkorDB graph.
+/// All memory nodes and entity relationships live in a single FalkorDB graph.
 /// </summary>
 public sealed class FalkorDbSemanticStore : ISemanticMemoryStore
 {
@@ -131,13 +130,7 @@ public sealed class FalkorDbSemanticStore : ISemanticMemoryStore
                 ON CREATE SET n.text = '{{escapedText}}',
                               n.embedding = vecf32({{vecStr}}),
                               n.user_id = '{{escapedUserId}}',
-                              n.stability = 1.0,
-                              n.difficulty = 5.0,
-                              n.retrieval_strength = 1.0,
-                              n.storage_strength = 0.5,
                               n.is_key = false,
-                              n.importance_weight = 1.0,
-                              n.access_count = 0,
                               n.created_at = timestamp(),
                               n.updated_at = timestamp()
                               {{extraProps}}
@@ -153,6 +146,81 @@ public sealed class FalkorDbSemanticStore : ISemanticMemoryStore
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "FalkorDB insert memory failed");
+        }
+    }
+
+    public async Task UpdateMemoryAsync(
+        string id, float[] embedding, string newText,
+        Dictionary<string, object?>? metadata = null, CancellationToken ct = default)
+    {
+        try
+        {
+            var db = await GetDbAsync();
+            var vecStr = SerializeVecf32(embedding);
+            var escapedText = EscapeCypher(newText);
+            var escapedId = EscapeCypher(id);
+
+            var extraProps = new StringBuilder();
+            if (metadata is not null)
+            {
+                foreach (var (key, value) in metadata)
+                {
+                    if (value is null) continue;
+                    var escapedValue = EscapeCypher(value.ToString() ?? "");
+                    extraProps.Append($", n.{key} = '{escapedValue}'");
+                }
+            }
+
+            var cypher = $$"""
+                MATCH (n:Memory {id: '{{escapedId}}'})
+                SET n.text = '{{escapedText}}',
+                    n.embedding = vecf32({{vecStr}}),
+                    n.updated_at = timestamp()
+                    {{extraProps}}
+                """;
+
+            await ExecuteQueryAsync(db, cypher);
+            _logger.LogDebug("Updated memory {Id}", id);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "FalkorDB update memory failed for {Id}", id);
+        }
+    }
+
+    public async Task<MemoryItem?> GetMemoryAsync(string id, CancellationToken ct = default)
+    {
+        try
+        {
+            var db = await GetDbAsync();
+            var cypher = $$"""
+                MATCH (n:Memory {id: '{{EscapeCypher(id)}}'})
+                RETURN n.id AS id, n.text AS text,
+                       n.category AS category, n.is_key AS is_key,
+                       n.memory_type AS memory_type, n.topic_name AS topic_name,
+                       n.emotional_weight AS emotional_weight,
+                       n.channel_id AS channel_id, n.sentiment_end AS sentiment_end,
+                       n.created_at AS created_at
+                """;
+
+            var results = await ExecuteQueryAsync(db, cypher);
+            if (results.Count == 0) return null;
+
+            var row = results[0];
+            if (row.Length < 2) return null;
+
+            return new MemoryItem
+            {
+                Id = (string?)row[0] ?? "",
+                Memory = (string?)row[1] ?? "",
+                Score = 1.0,
+                Metadata = BuildMetadataFromGetAll(row),
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "FalkorDB get memory failed for {Id}", id);
+            return null;
         }
     }
 
@@ -224,178 +292,6 @@ public sealed class FalkorDbSemanticStore : ISemanticMemoryStore
         {
             _logger.LogWarning(ex, "FalkorDB get all memories failed");
             return [];
-        }
-    }
-
-    // ========== FSRS ops ==========
-
-    public async Task<FsrsState?> GetFsrsStateAsync(
-        string memoryId, IReadOnlyList<string> userIds, CancellationToken ct = default)
-    {
-        try
-        {
-            var db = await GetDbAsync();
-            var userFilter = BuildUserIdFilter(userIds);
-
-            var cypher = $$"""
-                MATCH (n:Memory {id: '{{EscapeCypher(memoryId)}}'})
-                WHERE n.user_id IN [{{userFilter}}]
-                RETURN n.id, n.user_id, n.stability, n.difficulty,
-                       n.retrieval_strength, n.storage_strength,
-                       n.is_key, n.importance_weight, n.category, n.tags,
-                       n.last_accessed_at, n.access_count,
-                       n.created_at, n.updated_at
-                """;
-
-            var results = await ExecuteQueryAsync(db, cypher);
-            if (results.Count == 0) return null;
-
-            return ParseFsrsState(results[0]);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "GetFsrsState failed for {MemoryId}", memoryId);
-            return null;
-        }
-    }
-
-    public async Task<Dictionary<string, FsrsState>> BatchGetFsrsStatesAsync(
-        IEnumerable<string> memoryIds, IReadOnlyList<string> userIds, CancellationToken ct = default)
-    {
-        try
-        {
-            var db = await GetDbAsync();
-            var userFilter = BuildUserIdFilter(userIds);
-            var idList = string.Join(", ", memoryIds.Select(id => $"'{EscapeCypher(id)}'"));
-
-            var cypher = $$"""
-                MATCH (n:Memory)
-                WHERE n.id IN [{{idList}}] AND n.user_id IN [{{userFilter}}]
-                RETURN n.id, n.user_id, n.stability, n.difficulty,
-                       n.retrieval_strength, n.storage_strength,
-                       n.is_key, n.importance_weight, n.category, n.tags,
-                       n.last_accessed_at, n.access_count,
-                       n.created_at, n.updated_at
-                """;
-
-            var results = await ExecuteQueryAsync(db, cypher);
-            var dict = new Dictionary<string, FsrsState>();
-
-            foreach (var row in results)
-            {
-                var state = ParseFsrsState(row);
-                if (!string.IsNullOrEmpty(state.MemoryId))
-                    dict[state.MemoryId] = state;
-            }
-
-            return dict;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "BatchGetFsrsStates failed");
-            return new Dictionary<string, FsrsState>();
-        }
-    }
-
-    public async Task UpdateFsrsStateAsync(FsrsState state, CancellationToken ct = default)
-    {
-        try
-        {
-            var db = await GetDbAsync();
-
-            var lastAccessed = state.LastAccessedAt.HasValue
-                ? $"'{state.LastAccessedAt.Value:o}'"
-                : "null";
-
-            var cypher = $$"""
-                MATCH (n:Memory {id: '{{EscapeCypher(state.MemoryId)}}'})
-                SET n.stability = {{F(state.Stability)}},
-                    n.difficulty = {{F(state.Difficulty)}},
-                    n.retrieval_strength = {{F(state.RetrievalStrength)}},
-                    n.storage_strength = {{F(state.StorageStrength)}},
-                    n.is_key = {{(state.IsKey ? "true" : "false")}},
-                    n.importance_weight = {{F(state.ImportanceWeight)}},
-                    n.access_count = {{state.AccessCount}},
-                    n.last_accessed_at = {{lastAccessed}},
-                    n.updated_at = timestamp()
-                """;
-
-            if (state.Category is not null)
-                cypher += $", n.category = '{EscapeCypher(state.Category)}'";
-            if (state.Tags is not null)
-                cypher += $", n.tags = '{EscapeCypher(state.Tags)}'";
-
-            await ExecuteQueryAsync(db, cypher);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "UpdateFsrsState failed for {MemoryId}", state.MemoryId);
-        }
-    }
-
-    public async Task RecordAccessEventAsync(
-        string memoryId, string userId, int grade, string signalType,
-        double retrievabilityAtAccess, string? context = null, CancellationToken ct = default)
-    {
-        try
-        {
-            var db = await GetDbAsync();
-            var eventId = Guid.NewGuid().ToString();
-
-            var contextProp = context is not null
-                ? $", a.context = '{EscapeCypher(context)}'"
-                : "";
-
-            var cypher = $$"""
-                MATCH (m:Memory {id: '{{EscapeCypher(memoryId)}}'})
-                CREATE (a:AccessEvent {
-                    id: '{{eventId}}',
-                    user_id: '{{EscapeCypher(userId)}}',
-                    grade: {{grade}},
-                    signal_type: '{{EscapeCypher(signalType)}}',
-                    retrievability_at_access: {{F(retrievabilityAtAccess)}},
-                    accessed_at: timestamp()
-                    {{contextProp}}
-                })
-                CREATE (m)-[:REVIEWED]->(a)
-                """;
-
-            await ExecuteQueryAsync(db, cypher);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "RecordAccessEvent failed for {MemoryId}", memoryId);
-        }
-    }
-
-    public async Task RecordSupersessionAsync(
-        string oldId, string newId, string userId, string reason,
-        double confidence, string? details = null, CancellationToken ct = default)
-    {
-        try
-        {
-            var db = await GetDbAsync();
-
-            var detailsProp = details is not null
-                ? $", details: '{EscapeCypher(details)}'"
-                : "";
-
-            var cypher = $$"""
-                MATCH (old:Memory {id: '{{EscapeCypher(oldId)}}'})
-                MATCH (new:Memory {id: '{{EscapeCypher(newId)}}'})
-                CREATE (new)-[:SUPERSEDES {
-                    reason: '{{EscapeCypher(reason)}}',
-                    confidence: {{F(confidence)}}
-                    {{detailsProp}},
-                    created_at: timestamp()
-                }]->(old)
-                """;
-
-            await ExecuteQueryAsync(db, cypher);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "RecordSupersession failed");
         }
     }
 
@@ -683,25 +579,6 @@ public sealed class FalkorDbSemanticStore : ISemanticMemoryStore
         }
     }
 
-    private static FsrsState ParseFsrsState(RedisResult[] row)
-    {
-        return new FsrsState
-        {
-            MemoryId = (string?)row[0] ?? "",
-            UserId = (string?)row[1] ?? "",
-            Stability = ToDouble(row[2], 1.0),
-            Difficulty = ToDouble(row[3], 5.0),
-            RetrievalStrength = ToDouble(row[4], 1.0),
-            StorageStrength = ToDouble(row[5], 0.5),
-            IsKey = ToBool(row[6]),
-            ImportanceWeight = ToDouble(row[7], 1.0),
-            Category = (string?)row[8],
-            Tags = (string?)row[9],
-            LastAccessedAt = ToDateTime(row[10]),
-            AccessCount = ToInt(row[11]),
-        };
-    }
-
     private static Dictionary<string, object?> BuildMetadata(RedisResult[] row)
     {
         var meta = new Dictionary<string, object?>();
@@ -753,31 +630,4 @@ public sealed class FalkorDbSemanticStore : ISemanticMemoryStore
         var str = result.ToString();
         return double.TryParse(str, CultureInfo.InvariantCulture, out var v) ? v : defaultValue;
     }
-
-    private static int ToInt(RedisResult? result, int defaultValue = 0)
-    {
-        if (result is null || result.IsNull) return defaultValue;
-        var str = result.ToString();
-        return int.TryParse(str, out var v) ? v : defaultValue;
-    }
-
-    private static bool ToBool(RedisResult? result)
-    {
-        if (result is null || result.IsNull) return false;
-        var str = result.ToString()?.ToLowerInvariant();
-        return str is "true" or "1";
-    }
-
-    private static DateTime? ToDateTime(RedisResult? result)
-    {
-        if (result is null || result.IsNull) return null;
-        var str = result.ToString();
-        if (string.IsNullOrEmpty(str) || str == "null") return null;
-        return DateTime.TryParse(str, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out var dt)
-            ? dt : null;
-    }
-
-    /// <summary>Format double for Cypher with invariant culture.</summary>
-    private static string F(double value)
-        => value.ToString("G", CultureInfo.InvariantCulture);
 }

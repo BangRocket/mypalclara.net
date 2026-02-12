@@ -11,7 +11,13 @@ public interface IMemoryService
     Task AddAsync(string userMessage, string assistantResponse, string userId, CancellationToken ct = default);
     void TrackSentiment(string userId, string channelId, string message);
     Task FinalizeSessionAsync(string userId, string channelId, CancellationToken ct = default);
-    Task PromoteUsedMemoriesAsync(IEnumerable<string> memoryIds, IReadOnlyList<string> userIds, CancellationToken ct = default);
     Task<List<MemoryItem>> SearchAsync(string query, IReadOnlyList<string> userIds, int limit = 10, CancellationToken ct = default);
     Task<List<MemoryItem>> GetKeyMemoriesAsync(IReadOnlyList<string> userIds, CancellationToken ct = default);
+    Task<List<MemoryHistoryEntry>> GetHistoryAsync(string memoryId, CancellationToken ct = default);
+
+    // --- CRUD ---
+    Task<MemoryItem?> GetAsync(string memoryId, CancellationToken ct = default);
+    Task<List<MemoryItem>> GetAllAsync(IReadOnlyList<string> userIds, int limit = 100, CancellationToken ct = default);
+    Task DeleteAsync(string memoryId, CancellationToken ct = default);
+    Task UpdateAsync(string memoryId, string newText, CancellationToken ct = default);
 }

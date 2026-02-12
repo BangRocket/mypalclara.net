@@ -1,6 +1,6 @@
 namespace MyPalClara.Core.Memory;
 
-/// <summary>A memory record returned from vector search, possibly enriched with FSRS data.</summary>
+/// <summary>A memory record returned from vector search.</summary>
 public sealed class MemoryItem
 {
     public required string Id { get; init; }
@@ -8,8 +8,8 @@ public sealed class MemoryItem
     public double Score { get; set; }
     public Dictionary<string, object?> Metadata { get; init; } = [];
 
-    // FSRS enrichment (set by CompositeScorer)
-    public double CompositeScore { get; set; }
     public string? Category { get; set; }
     public bool IsKey { get; set; }
+    public DateTime? CreatedAt { get; set; }
+    public DateTime? UpdatedAt { get; set; }
 }

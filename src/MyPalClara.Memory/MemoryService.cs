@@ -2,15 +2,15 @@ using System.Text;
 using MyPalClara.Core.Configuration;
 using MyPalClara.Core.Memory;
 using MyPalClara.Memory.Context;
-using MyPalClara.Memory.Dynamics;
 using MyPalClara.Memory.Extraction;
+using MyPalClara.Memory.History;
 using Microsoft.Extensions.Logging;
 
 namespace MyPalClara.Memory;
 
 /// <summary>
-/// Top-level memory orchestrator. Ties together semantic memory store, FSRS,
-/// emotional context, and topic recurrence.
+/// Top-level memory orchestrator. Ties together semantic memory store,
+/// mem0-style pipeline, emotional context, and topic recurrence.
 /// READ methods accept IReadOnlyList&lt;string&gt; userIds for cross-platform identity.
 /// WRITE methods use single userId (platform-specific).
 /// </summary>
@@ -18,39 +18,36 @@ public sealed class MemoryService : IMemoryService
 {
     private readonly ISemanticMemoryStore _store;
     private readonly EmbeddingClient _embeddingClient;
-    private readonly MemoryDynamicsService _dynamics;
-    private readonly CompositeScorer _scorer;
+    private readonly FactExtractor _factExtractor;
+    private readonly MemoryManager _memoryManager;
+    private readonly MemoryHistoryStore _historyStore;
     private readonly ClaraConfig _config;
     private readonly ILogger<MemoryService> _logger;
 
     // Optional subsystems — null when not configured
     private readonly EmotionalContext? _emotionalContext;
     private readonly TopicRecurrence? _topicRecurrence;
-    private readonly FactExtractor? _factExtractor;
-    private readonly SmartIngest? _smartIngest;
 
     public MemoryService(
         ISemanticMemoryStore store,
         EmbeddingClient embeddingClient,
-        MemoryDynamicsService dynamics,
-        CompositeScorer scorer,
+        FactExtractor factExtractor,
+        MemoryManager memoryManager,
+        MemoryHistoryStore historyStore,
         ClaraConfig config,
         ILogger<MemoryService> logger,
         EmotionalContext? emotionalContext = null,
-        TopicRecurrence? topicRecurrence = null,
-        FactExtractor? factExtractor = null,
-        SmartIngest? smartIngest = null)
+        TopicRecurrence? topicRecurrence = null)
     {
         _store = store;
         _embeddingClient = embeddingClient;
-        _dynamics = dynamics;
-        _scorer = scorer;
+        _factExtractor = factExtractor;
+        _memoryManager = memoryManager;
+        _historyStore = historyStore;
         _config = config;
         _logger = logger;
         _emotionalContext = emotionalContext;
         _topicRecurrence = topicRecurrence;
-        _factExtractor = factExtractor;
-        _smartIngest = smartIngest;
     }
 
     /// <summary>
@@ -84,8 +81,8 @@ public sealed class MemoryService : IMemoryService
         var keyMemories = await keyMemoriesTask;
         var searchResults = await searchTask;
 
-        // FSRS re-rank search results
-        searchResults = await _scorer.RankAsync(searchResults, userIds);
+        // Sort by vector score (no FSRS rerank)
+        searchResults = searchResults.OrderByDescending(m => m.Score).ToList();
 
         var graphRelations = await graphTask;
         var emotionalCtx = emotionalTask is not null ? await emotionalTask : [];
@@ -159,47 +156,65 @@ public sealed class MemoryService : IMemoryService
     /// <summary>Store new memories from a conversation (background, post-response). WRITE — single userId.</summary>
     public async Task AddAsync(string userMessage, string assistantResponse, string userId, CancellationToken ct = default)
     {
-        // Fact extraction + smart ingest
-        if (_factExtractor is not null && _smartIngest is not null)
+        List<string> facts = [];
+
+        // 1. Extract facts via LLM
+        try
+        {
+            facts = await _factExtractor.ExtractFactsAsync(userMessage, assistantResponse, ct);
+            _logger.LogDebug("Extracted {Count} facts for ingestion", facts.Count);
+
+            // 2. Process facts through mem0-style pipeline
+            if (facts.Count > 0)
+            {
+                var actions = await _memoryManager.ProcessFactsAsync(facts, userId, ct: ct);
+                _logger.LogDebug("Memory pipeline produced {Count} actions", actions.Count);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Fact extraction/ingestion failed for user {UserId}", userId);
+        }
+
+        // 3. Graph extraction — feed structured facts instead of raw conversation text
+        var graphTask = Task.CompletedTask;
+        var topicTask = Task.CompletedTask;
+
+        if (facts.Count > 0)
         {
             try
             {
-                var facts = await _factExtractor.ExtractFactsAsync(userMessage, assistantResponse, ct);
-                _logger.LogDebug("Extracted {Count} facts for ingestion", facts.Count);
-
-                foreach (var fact in facts)
-                {
-                    var result = await _smartIngest.IngestAsync(fact, userId, ct);
-                    _logger.LogDebug("Ingested fact: {Action} — {Reason}", result.Action, result.Reason);
-                }
-
-                // Add facts to graph
-                foreach (var fact in facts)
-                {
-                    try { await _store.AddEntityDataAsync(fact, userId, ct: ct); }
-                    catch (Exception ex) { _logger.LogDebug(ex, "Graph add failed for fact"); }
-                }
+                var factText = string.Join("\n", facts);
+                graphTask = _store.AddEntityDataAsync(factText, userId, ct: ct);
             }
             catch (Exception ex)
             {
-                _logger.LogWarning(ex, "Fact extraction/ingestion failed for user {UserId}", userId);
+                _logger.LogDebug(ex, "Graph extraction failed");
             }
         }
 
-        // Topic extraction + storage
+        // 4. Topic extraction + storage
         if (_topicRecurrence is not null)
         {
-            try
-            {
-                var conversationText = $"User: {userMessage}\nAssistant: {assistantResponse}";
-                var topics = await _topicRecurrence.ExtractTopicsAsync(conversationText, ct);
-                foreach (var topic in topics)
-                    await _topicRecurrence.StoreMentionAsync(topic, userId, ct: ct);
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Topic extraction failed for user {UserId}", userId);
-            }
+            topicTask = ExtractAndStoreTopicsAsync(userMessage, assistantResponse, userId, ct);
+        }
+
+        await Task.WhenAll(graphTask, topicTask);
+    }
+
+    private async Task ExtractAndStoreTopicsAsync(
+        string userMessage, string assistantResponse, string userId, CancellationToken ct)
+    {
+        try
+        {
+            var conversationText = $"User: {userMessage}\nAssistant: {assistantResponse}";
+            var topics = await _topicRecurrence!.ExtractTopicsAsync(conversationText, ct);
+            foreach (var topic in topics)
+                await _topicRecurrence.StoreMentionAsync(topic, userId, ct: ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Topic extraction failed for user {UserId}", userId);
         }
     }
 
@@ -224,28 +239,12 @@ public sealed class MemoryService : IMemoryService
         }
     }
 
-    /// <summary>Promote memories that were used in a response (across linked user IDs).</summary>
-    public async Task PromoteUsedMemoriesAsync(IEnumerable<string> memoryIds, IReadOnlyList<string> userIds, CancellationToken ct = default)
-    {
-        foreach (var id in memoryIds)
-        {
-            try
-            {
-                await _dynamics.PromoteAsync(id, userIds, Grade.Good, "used_in_response");
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Failed to promote memory {MemoryId}", id);
-            }
-        }
-    }
-
     /// <summary>Search memories across linked user IDs (for !memory search command).</summary>
     public async Task<List<MemoryItem>> SearchAsync(string query, IReadOnlyList<string> userIds, int limit = 10, CancellationToken ct = default)
     {
         var embedding = await _embeddingClient.EmbedAsync(query, ct);
         var results = await _store.SearchAsync(embedding, userIds, limit: limit, ct: ct);
-        return await _scorer.RankAsync(results, userIds);
+        return results.OrderByDescending(m => m.Score).ToList();
     }
 
     /// <summary>Get key memories across linked user IDs (for !memory key command).</summary>
@@ -255,5 +254,36 @@ public sealed class MemoryService : IMemoryService
             userIds,
             new Dictionary<string, object?> { ["is_key"] = "true" },
             limit: 50, ct: ct);
+    }
+
+    /// <summary>Get change history for a memory.</summary>
+    public Task<List<MemoryHistoryEntry>> GetHistoryAsync(string memoryId, CancellationToken ct = default)
+    {
+        return _historyStore.GetHistoryAsync(memoryId, ct);
+    }
+
+    /// <summary>Get a single memory by ID.</summary>
+    public Task<MemoryItem?> GetAsync(string memoryId, CancellationToken ct = default)
+        => _store.GetMemoryAsync(memoryId, ct);
+
+    /// <summary>Get all memories across linked user IDs.</summary>
+    public Task<List<MemoryItem>> GetAllAsync(IReadOnlyList<string> userIds, int limit = 100, CancellationToken ct = default)
+        => _store.GetAllMemoriesAsync(userIds, limit: limit, ct: ct);
+
+    /// <summary>Delete a memory by ID with history tracking.</summary>
+    public async Task DeleteAsync(string memoryId, CancellationToken ct = default)
+    {
+        var existing = await _store.GetMemoryAsync(memoryId, ct);
+        await _store.DeleteMemoryAsync(memoryId, ct);
+        await _historyStore.AddEntryAsync(memoryId, existing?.Memory, null, "DELETE", ct: ct);
+    }
+
+    /// <summary>Update a memory's text by ID with history tracking.</summary>
+    public async Task UpdateAsync(string memoryId, string newText, CancellationToken ct = default)
+    {
+        var existing = await _store.GetMemoryAsync(memoryId, ct);
+        var embedding = await _embeddingClient.EmbedAsync(newText, ct);
+        await _store.UpdateMemoryAsync(memoryId, embedding, newText, ct: ct);
+        await _historyStore.AddEntryAsync(memoryId, existing?.Memory, newText, "UPDATE", ct: ct);
     }
 }

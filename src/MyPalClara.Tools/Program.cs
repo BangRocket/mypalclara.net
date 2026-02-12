@@ -8,8 +8,8 @@ using MyPalClara.Gateway.Llm;
 using MyPalClara.Memory;
 using MyPalClara.Memory.Cache;
 using MyPalClara.Memory.Context;
-using MyPalClara.Memory.Dynamics;
 using MyPalClara.Memory.Extraction;
+using MyPalClara.Memory.History;
 using MyPalClara.Tools.Backfill;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -65,14 +65,10 @@ builder.Services.AddDbContextFactory<ClaraDbContext>(opts =>
 builder.Services.AddSingleton<UserIdentityService>();
 builder.Services.AddSingleton<ChatHistoryService>();
 
-// --- FSRS / memory dynamics ---
-builder.Services.AddSingleton<MemoryDynamicsService>();
-builder.Services.AddSingleton<CompositeScorer>();
-
-// --- Memory extraction ---
-builder.Services.AddSingleton<ContradictionDetector>();
+// --- Memory extraction (mem0-style pipeline) ---
 builder.Services.AddSingleton<FactExtractor>();
-builder.Services.AddSingleton<SmartIngest>();
+builder.Services.AddSingleton<MemoryHistoryStore>();
+builder.Services.AddSingleton<MemoryManager>();
 
 // --- Emotional context & topic recurrence ---
 builder.Services.AddSingleton<EmotionalContext>();
@@ -129,6 +125,7 @@ if (!options.SkipMemory)
     {
         Console.Error.WriteLine($"FalkorDB schema warning: {ex.Message}");
     }
+
 }
 
 // Run backfill

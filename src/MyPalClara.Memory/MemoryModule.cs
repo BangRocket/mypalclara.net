@@ -1,11 +1,10 @@
-using MyPalClara.Core.Configuration;
 using MyPalClara.Core.Llm;
 using MyPalClara.Core.Memory;
 using MyPalClara.Core.Modules;
 using MyPalClara.Memory.Cache;
 using MyPalClara.Memory.Context;
-using MyPalClara.Memory.Dynamics;
 using MyPalClara.Memory.Extraction;
+using MyPalClara.Memory.History;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -22,14 +21,12 @@ public sealed class MemoryModule : IGatewayModule
         services.AddHttpClient<EmbeddingClient>();
         services.AddSingleton<FalkorDbSemanticStore>();
         services.AddSingleton<ISemanticMemoryStore>(sp => sp.GetRequiredService<FalkorDbSemanticStore>());
-        services.AddSingleton<MemoryDynamicsService>();
-        services.AddSingleton<CompositeScorer>();
         services.AddSingleton<EmotionalContext>();
         services.AddHttpClient<RookProvider>();
         services.AddSingleton<TopicRecurrence>();
         services.AddSingleton<FactExtractor>();
-        services.AddSingleton<ContradictionDetector>();
-        services.AddSingleton<SmartIngest>();
+        services.AddSingleton<MemoryHistoryStore>();
+        services.AddSingleton<MemoryManager>();
         services.AddSingleton<MemoryService>();
         services.AddSingleton<IMemoryService>(sp => sp.GetRequiredService<MemoryService>());
     }
@@ -38,8 +35,9 @@ public sealed class MemoryModule : IGatewayModule
     {
         var store = services.GetRequiredService<FalkorDbSemanticStore>();
         await store.EnsureSchemaAsync(ct);
+
         var logger = services.GetRequiredService<ILogger<MemoryModule>>();
-        logger.LogInformation("Memory module initialized — FalkorDB schema ensured");
+        logger.LogInformation("Memory module initialized — FalkorDB schema ensured, history in PostgreSQL");
     }
 
     public Task ShutdownAsync(CancellationToken ct) => Task.CompletedTask;
