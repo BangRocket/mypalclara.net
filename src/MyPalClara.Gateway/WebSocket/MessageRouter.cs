@@ -267,10 +267,20 @@ public sealed class MessageRouter
             // 9. Background: persist chat + memory
             if (channelSession.ConversationId is not null)
             {
-                _ = _chatHistory.StoreExchangeAsync(
-                    channelSession.ConversationId.Value,
-                    channelSession.UserGuid,
-                    chat.Content, fullText, ct);
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        await _chatHistory.StoreExchangeAsync(
+                            channelSession.ConversationId.Value,
+                            channelSession.UserGuid,
+                            chat.Content, fullText, ct);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Background chat history persist failed");
+                    }
+                }, ct);
             }
 
             if (_memory is not null && !string.IsNullOrWhiteSpace(fullText))
@@ -291,7 +301,11 @@ public sealed class MessageRouter
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error handling chat request for {Channel}", chat.ChannelId);
-            await SendAsync(session.WebSocket, new ErrorMessage($"Internal error: {ex.Message}"), ct);
+            try
+            {
+                await SendAsync(session.WebSocket, new ErrorMessage($"Internal error: {ex.Message}"), ct);
+            }
+            catch { /* best effort — WebSocket may already be closed */ }
         }
     }
 
