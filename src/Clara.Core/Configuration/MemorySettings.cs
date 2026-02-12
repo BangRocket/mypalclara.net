@@ -21,10 +21,10 @@ public sealed class GraphStoreSettings
 
 public sealed class EmbeddingSettings
 {
-    public string Provider { get; set; } = "ollama";
-    public string BaseUrl { get; set; } = "http://localhost:11434/v1/";
+    public string Provider { get; set; } = "openai";
+    public string BaseUrl { get; set; } = "";
     public string ApiKey { get; set; } = "";
-    public string Model { get; set; } = "qwen3-embedding:4b";
+    public string Model { get; set; } = "text-embedding-3-small";
     public bool CacheEnabled { get; set; } = true;
 }
 
