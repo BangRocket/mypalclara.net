@@ -12,4 +12,16 @@ public sealed record ToolSchema(string Name, string Description, JsonElement Inp
         ["description"] = Description,
         ["input_schema"] = InputSchema,
     };
+
+    /// <summary>Converts to OpenAI function-calling tool format.</summary>
+    public Dictionary<string, object?> ToOpenAiFormat() => new()
+    {
+        ["type"] = "function",
+        ["function"] = new Dictionary<string, object?>
+        {
+            ["name"] = Name,
+            ["description"] = Description,
+            ["parameters"] = InputSchema,
+        },
+    };
 }

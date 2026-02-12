@@ -65,8 +65,17 @@ builder.Services.AddSingleton(config);
 builder.Services.AddSingleton<IAnsiConsole>(console);
 
 // --- LLM provider ---
-builder.Services.AddHttpClient<AnthropicProvider>();
-builder.Services.AddSingleton<ILlmProvider>(sp => sp.GetRequiredService<AnthropicProvider>());
+var isAnthropic = config.Llm.Provider.Equals("anthropic", StringComparison.OrdinalIgnoreCase);
+if (isAnthropic)
+{
+    builder.Services.AddHttpClient<AnthropicProvider>();
+    builder.Services.AddSingleton<ILlmProvider>(sp => sp.GetRequiredService<AnthropicProvider>());
+}
+else
+{
+    builder.Services.AddHttpClient<OpenAiProvider>();
+    builder.Services.AddSingleton<ILlmProvider>(sp => sp.GetRequiredService<OpenAiProvider>());
+}
 
 // --- Rook provider (OpenAI-compatible, for fact extraction / topic extraction / graph entities) ---
 builder.Services.AddHttpClient<RookProvider>();
