@@ -104,7 +104,12 @@ public sealed class BackfillRunner
 
         // Process each conversation
         var processed = 0;
+        var failed = 0;
         var totalConvs = conversations.Count(c => !checkpoint.IsCompleted(c.SourceId));
+        var totalSw = System.Diagnostics.Stopwatch.StartNew();
+
+        _logger.LogInformation("Beginning backfill of {Total} conversations (skip-history={SkipHistory}, skip-memory={SkipMemory})",
+            totalConvs, options.SkipHistory, options.SkipMemory);
 
         foreach (var conv in conversations)
         {
@@ -122,11 +127,19 @@ public sealed class BackfillRunner
             }
             catch (Exception ex)
             {
+                failed++;
                 _logger.LogError(ex, "Failed to process conversation {SourceId}, skipping", conv.SourceId);
             }
         }
 
-        _logger.LogInformation("Backfill complete: {Processed} conversations processed", processed);
+        totalSw.Stop();
+        var totalExchangesProcessed = conversations
+            .Where(c => !checkpoint.IsCompleted(c.SourceId) is false)
+            .Take(processed)
+            .Sum(c => c.Exchanges.Count);
+
+        _logger.LogInformation("Backfill complete in {Elapsed:F1}s: {Processed} conversations processed, {Failed} failed, {Skipped} skipped (checkpoint)",
+            totalSw.Elapsed.TotalSeconds, processed, failed, skipped);
     }
 
     private async Task ProcessConversationAsync(
@@ -142,10 +155,15 @@ public sealed class BackfillRunner
             _ => throw new ArgumentException($"Unknown source type: {conv.SourceType}")
         };
 
+        var dateRange = $"{conv.Exchanges[0].UserTimestamp:yyyy-MM-dd} to {conv.Exchanges[^1].AssistantTimestamp:yyyy-MM-dd}";
+        _logger.LogInformation("  Source: {Source}, Channel: {Channel}, Dates: {Range}",
+            adapterType, channelName, dateRange);
+
         // Create adapter/channel
         Guid channelId;
         if (!options.SkipHistory)
         {
+            _logger.LogInformation("  Ensuring channel: {Adapter}/{Channel}", adapterName, channelName);
             var channelResult = await _chatHistory.EnsureChannelAsync(
                 adapterType, adapterName, externalId, channelName, channelType, ct);
             if (channelResult is null)
@@ -154,10 +172,12 @@ public sealed class BackfillRunner
                 return;
             }
             channelId = channelResult.Value.ChannelId;
+            _logger.LogDebug("  Channel ID: {ChannelId}", channelId);
         }
         else
         {
             channelId = Guid.Empty;
+            _logger.LogInformation("  Skipping history (--skip-history)");
         }
 
         // Create conversation with historical timestamp
@@ -168,16 +188,27 @@ public sealed class BackfillRunner
                 channelId, userGuid,
                 conv.Exchanges[0].UserTimestamp,
                 ct);
+            _logger.LogDebug("  Conversation ID: {ConversationId}", conversationId);
         }
 
         // Process each exchange
         var emotionalChannelId = $"{adapterType}-{externalId}";
+        var memorySuccessCount = 0;
+        var memoryFailCount = 0;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         for (var i = 0; i < conv.Exchanges.Count; i++)
         {
             if (ct.IsCancellationRequested) break;
 
             var exchange = conv.Exchanges[i];
+
+            if (i % 10 == 0 || i == conv.Exchanges.Count - 1)
+            {
+                _logger.LogInformation("  Exchange {Current}/{Total} ({Date:yyyy-MM-dd HH:mm}): \"{Preview}\"",
+                    i + 1, conv.Exchanges.Count, exchange.UserTimestamp,
+                    exchange.UserMessage.Length > 60 ? exchange.UserMessage[..60] + "..." : exchange.UserMessage);
+            }
 
             // Store in chat history
             if (!options.SkipHistory && conversationId is not null)
@@ -195,9 +226,11 @@ public sealed class BackfillRunner
                 try
                 {
                     await _memory.AddAsync(exchange.UserMessage, exchange.AssistantMessage, userId, ct);
+                    memorySuccessCount++;
                 }
                 catch (Exception ex)
                 {
+                    memoryFailCount++;
                     _logger.LogDebug(ex, "Memory add failed for exchange {Index} in {SourceId}", i, conv.SourceId);
                 }
 
@@ -209,6 +242,8 @@ public sealed class BackfillRunner
             if (options.DelayMs > 0)
                 await Task.Delay(options.DelayMs, ct);
         }
+
+        sw.Stop();
 
         // Update last activity timestamp
         if (!options.SkipHistory && conversationId is not null)
@@ -224,9 +259,13 @@ public sealed class BackfillRunner
         {
             await _memory.FinalizeSessionAsync(userId, emotionalChannelId, ct);
         }
+
+        // Summary for this conversation
+        _logger.LogInformation("  Done in {Elapsed:F1}s — {Exchanges} exchanges, memory: {Ok} ok / {Fail} failed",
+            sw.Elapsed.TotalSeconds, conv.Exchanges.Count, memorySuccessCount, memoryFailCount);
     }
 
-    private static List<BackfillConversation> ParseAll(string chatsDir, string? sourceFilter)
+    private List<BackfillConversation> ParseAll(string chatsDir, string? sourceFilter)
     {
         var conversations = new List<BackfillConversation>();
 
@@ -235,23 +274,41 @@ public sealed class BackfillRunner
         {
             var chatgptDir = Path.Combine(chatsDir, "chatgpt-export-json-mara");
             if (Directory.Exists(chatgptDir))
-                conversations.AddRange(ChatGptParser.ParseDirectory(chatgptDir));
+            {
+                var parsed = ChatGptParser.ParseDirectory(chatgptDir);
+                _logger.LogInformation("Parsed {Count} ChatGPT conversations from {Dir}", parsed.Count, chatgptDir);
+                conversations.AddRange(parsed);
+            }
+            else
+            {
+                _logger.LogDebug("ChatGPT export dir not found: {Dir}", chatgptDir);
+            }
         }
 
         // Discord DM
         if (sourceFilter is null or "discord-dm")
         {
             var dmFiles = Directory.GetFiles(chatsDir, "Direct Messages*.json");
+            _logger.LogInformation("Found {Count} Discord DM export files", dmFiles.Length);
             foreach (var file in dmFiles)
-                conversations.AddRange(DiscordParser.ParseDmFile(file));
+            {
+                var parsed = DiscordParser.ParseDmFile(file);
+                _logger.LogInformation("  {File}: {Count} conversations", Path.GetFileName(file), parsed.Count);
+                conversations.AddRange(parsed);
+            }
         }
 
         // Discord Server
         if (sourceFilter is null or "discord-server")
         {
             var serverFiles = Directory.GetFiles(chatsDir, "JORSHTOPIA*.json");
+            _logger.LogInformation("Found {Count} Discord Server export files", serverFiles.Length);
             foreach (var file in serverFiles)
-                conversations.AddRange(DiscordParser.ParseServerFile(file));
+            {
+                var parsed = DiscordParser.ParseServerFile(file);
+                _logger.LogInformation("  {File}: {Count} conversations", Path.GetFileName(file), parsed.Count);
+                conversations.AddRange(parsed);
+            }
         }
 
         return conversations;
