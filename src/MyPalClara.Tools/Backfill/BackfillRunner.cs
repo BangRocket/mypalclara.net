@@ -1,7 +1,7 @@
 using MyPalClara.Core.Chat;
 using MyPalClara.Core.Configuration;
 using MyPalClara.Core.Identity;
-using MyPalClara.Memory;
+using MyPalClara.Core.Memory;
 using MyPalClara.Tools.Backfill.Models;
 using MyPalClara.Tools.Backfill.Parsers;
 using Microsoft.Extensions.Logging;
@@ -15,14 +15,14 @@ public sealed class BackfillRunner
 {
     private readonly ClaraConfig _config;
     private readonly ChatHistoryService _chatHistory;
-    private readonly MemoryService _memory;
+    private readonly IMemoryService _memory;
     private readonly UserIdentityService _identity;
     private readonly ILogger<BackfillRunner> _logger;
 
     public BackfillRunner(
         ClaraConfig config,
         ChatHistoryService chatHistory,
-        MemoryService memory,
+        IMemoryService memory,
         UserIdentityService identity,
         ILogger<BackfillRunner> logger)
     {

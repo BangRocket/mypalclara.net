@@ -6,10 +6,6 @@ using MyPalClara.Core.Llm;
 using MyPalClara.Core.Memory;
 using MyPalClara.Gateway.Llm;
 using MyPalClara.Memory;
-using MyPalClara.Memory.Cache;
-using MyPalClara.Memory.Context;
-using MyPalClara.Memory.Extraction;
-using MyPalClara.Memory.History;
 using MyPalClara.Tools.Backfill;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
@@ -48,16 +44,9 @@ builder.Logging.AddFilter("System", LogLevel.Warning);
 // --- Core singletons ---
 builder.Services.AddSingleton(config);
 
-// --- LLM providers (for fact extraction / topic extraction) ---
+// --- LLM providers ---
 builder.Services.AddHttpClient<AnthropicProvider>();
 builder.Services.AddSingleton<ILlmProvider>(sp => sp.GetRequiredService<AnthropicProvider>());
-builder.Services.AddHttpClient<RookProvider>();
-
-// --- Embedding client ---
-builder.Services.AddHttpClient<EmbeddingClient>();
-
-// --- Semantic memory store (FalkorDB) ---
-builder.Services.AddSingleton<ISemanticMemoryStore, FalkorDbSemanticStore>();
 
 // --- EF Core ---
 builder.Services.AddDbContextFactory<ClaraDbContext>(opts =>
@@ -65,16 +54,7 @@ builder.Services.AddDbContextFactory<ClaraDbContext>(opts =>
 builder.Services.AddSingleton<UserIdentityService>();
 builder.Services.AddSingleton<ChatHistoryService>();
 
-// --- Memory extraction (mem0-style pipeline) ---
-builder.Services.AddSingleton<FactExtractor>();
-builder.Services.AddSingleton<MemoryHistoryStore>();
-builder.Services.AddSingleton<MemoryManager>();
-
-// --- Emotional context & topic recurrence ---
-builder.Services.AddSingleton<EmotionalContext>();
-builder.Services.AddSingleton<TopicRecurrence>();
-
-// --- Redis cache (optional) ---
+// --- Redis cache (optional, must precede MemoryModule) ---
 if (!string.IsNullOrEmpty(config.Memory.RedisUrl))
 {
     builder.Services.AddStackExchangeRedisCache(opts =>
@@ -83,10 +63,9 @@ if (!string.IsNullOrEmpty(config.Memory.RedisUrl))
         opts.InstanceName = "clara:";
     });
 }
-builder.Services.AddSingleton<MemoryCache>();
 
-// --- Memory service ---
-builder.Services.AddSingleton<MemoryService>();
+// --- Memory module (single source of truth for memory DI) ---
+new MemoryModule().ConfigureServices(builder.Services, builder.Configuration);
 
 // --- LLM call logger ---
 builder.Services.AddSingleton<LlmCallLogger>();
