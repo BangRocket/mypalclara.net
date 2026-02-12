@@ -64,7 +64,11 @@ public sealed class DiscordBotService : IHostedService, IAsyncDisposable
 
         _client.Log += OnLog;
         _client.Ready += OnReady;
-        _client.MessageReceived += msg => _messageHandler.HandleAsync(msg, _client.CurrentUser);
+        _client.MessageReceived += msg =>
+        {
+            _ = Task.Run(() => _messageHandler.HandleAsync(msg, _client.CurrentUser));
+            return Task.CompletedTask;
+        };
         _client.InteractionCreated += OnInteractionCreated;
 
         // Initialize MCP servers before starting the bot
