@@ -24,7 +24,7 @@ public sealed class EmbeddingSettings
     public string Provider { get; set; } = "ollama";
     public string BaseUrl { get; set; } = "http://localhost:11434/v1/";
     public string ApiKey { get; set; } = "";
-    public string Model { get; set; } = "gte-qwen2:1.5b";
+    public string Model { get; set; } = "qwen3-embedding:4b";
     public bool CacheEnabled { get; set; } = true;
 }
 
