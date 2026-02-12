@@ -1,0 +1,26 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>MyPalClara.Memory</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MyPalClara.Core\MyPalClara.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Caching.StackExchangeRedis" Version="10.0.3" />
+    <PackageReference Include="StackExchange.Redis" Version="2.10.14" />
+  </ItemGroup>
+
+  <!-- Copy Memory module to Gateway plugins/ so ModuleLoader discovers it -->
+  <Target Name="CopyToGatewayPlugins" AfterTargets="Build">
+    <PropertyGroup>
+      <GatewayPluginsDir>$(MSBuildThisFileDirectory)..\MyPalClara.Gateway\bin\$(Configuration)\$(TargetFramework)\plugins\</GatewayPluginsDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(GatewayPluginsDir)" />
+    <Copy SourceFiles="$(TargetDir)MyPalClara.Memory.dll" DestinationFolder="$(GatewayPluginsDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetDir)MyPalClara.Memory.deps.json" DestinationFolder="$(GatewayPluginsDir)" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)MyPalClara.Memory.deps.json')" />
+  </Target>
+
+</Project>

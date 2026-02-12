@@ -1,6 +1,13 @@
 <Solution>
   <Folder Name="/src/">
-    <Project Path="src/Clara.Cli/Clara.Cli.csproj" />
-    <Project Path="src/Clara.Core/Clara.Core.csproj" />
+    <Project Path="src/MyPalClara.Core/MyPalClara.Core.csproj" />
+    <Project Path="src/MyPalClara.Gateway/MyPalClara.Gateway.csproj" />
+    <Project Path="src/MyPalClara.Memory/MyPalClara.Memory.csproj" />
+    <Project Path="src/MyPalClara.Voice/MyPalClara.Voice.csproj" />
+    <Project Path="src/MyPalClara.Cli/MyPalClara.Cli.csproj" />
+    <Project Path="src/MyPalClara.Discord/MyPalClara.Discord.csproj" />
+    <Project Path="src/MyPalClara.Ssh/MyPalClara.Ssh.csproj" />
+    <Project Path="src/MyPalClara.Tools/MyPalClara.Tools.csproj" />
   </Folder>
+
 </Solution>
