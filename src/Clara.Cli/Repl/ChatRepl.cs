@@ -32,8 +32,10 @@ public sealed class ChatRepl
     private IReadOnlyList<string> _allUserIds = [];
     private Guid? _userGuid;
 
-    // Conversation history (last N messages)
-    private const int ContextMessageCount = 15;
+    // Conversation history — load up to 50 messages, trim by token budget
+    private const int MaxHistoryMessages = 50;
+    // ~25% of 200K context for history, ~4 chars per token
+    private const int HistoryCharBudget = 200_000;
     private readonly List<ChatMessage> _history = [];
 
     // Tier prefix detection
@@ -108,7 +110,7 @@ public sealed class ChatRepl
                     var conversationId = await _chatHistory.GetOrCreateConversationAsync(channelId, _userGuid.Value, ct);
                     if (conversationId.HasValue)
                     {
-                        var dbMessages = await _chatHistory.LoadRecentMessagesAsync(conversationId.Value, ContextMessageCount, ct);
+                        var dbMessages = await _chatHistory.LoadRecentMessagesAsync(conversationId.Value, MaxHistoryMessages, ct);
                         if (dbMessages.Count > 0)
                         {
                             _history.AddRange(dbMessages);
@@ -264,9 +266,8 @@ public sealed class ChatRepl
         // Add to history
         _history.Add(new AssistantMessage(fullText));
 
-        // Trim history
-        while (_history.Count > ContextMessageCount * 2)
-            _history.RemoveAt(0);
+        // Trim history: drop oldest messages until within budget
+        TrimHistory();
 
         // Background: persist exchange to DB
         if (_chatHistory?.CurrentConversationId is not null && !string.IsNullOrEmpty(fullText))
@@ -333,6 +334,26 @@ public sealed class ChatRepl
         messages.Add(new UserMessage(currentInput));
 
         return messages;
+    }
+
+    private void TrimHistory()
+    {
+        // Hard cap on message count
+        while (_history.Count > MaxHistoryMessages * 2)
+            _history.RemoveAt(0);
+
+        // Trim oldest messages until within char budget
+        while (_history.Count > 2)
+        {
+            var totalChars = 0;
+            foreach (var msg in _history)
+                totalChars += msg.Content?.Length ?? 0;
+
+            if (totalChars <= HistoryCharBudget)
+                break;
+
+            _history.RemoveAt(0);
+        }
     }
 
     private async Task OnVoiceTranscriptionAsync(string text)
