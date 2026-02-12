@@ -31,7 +31,16 @@ services:
     volumes:
       - clara_redis_data:/data
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - clara_ollama_data:/root/.ollama
+
 volumes:
   clara_pg_data:
   clara_falkor_data:
   clara_redis_data:
+  clara_ollama_data:

@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Clara.Core.Memory;
 
-/// <summary>OpenAI text-embedding API client with optional Redis caching.</summary>
+/// <summary>OpenAI-compatible text-embedding API client with optional Redis caching. Works with OpenAI, Ollama, or any compatible endpoint.</summary>
 public sealed class EmbeddingClient
 {
     private readonly HttpClient _http;
@@ -21,8 +21,18 @@ public sealed class EmbeddingClient
         _logger = logger;
         _cache = cache;
 
-        _http.BaseAddress = new Uri("https://api.openai.com/v1/");
-        _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {config.Llm.OpenaiApiKey}");
+        var embeddingConfig = config.Memory.Embedding;
+        var baseUrl = string.IsNullOrEmpty(embeddingConfig.BaseUrl)
+            ? "https://api.openai.com/v1/"
+            : embeddingConfig.BaseUrl;
+        _http.BaseAddress = new Uri(baseUrl);
+
+        // Use embedding-specific API key, fall back to global OpenAI key
+        var apiKey = !string.IsNullOrEmpty(embeddingConfig.ApiKey)
+            ? embeddingConfig.ApiKey
+            : config.Llm.OpenaiApiKey;
+        if (!string.IsNullOrEmpty(apiKey))
+            _http.DefaultRequestHeaders.Add("Authorization", $"Bearer {apiKey}");
     }
 
     /// <summary>Generate embedding for a single text (cached).</summary>
