@@ -25,8 +25,11 @@ public static class ModuleLoader
         var modules = new List<IGatewayModule>();
 
         Directory.CreateDirectory(pluginsDir);
+        var fullPluginsPath = Path.GetFullPath(pluginsDir);
+        var dlls = Directory.GetFiles(fullPluginsPath, "*.dll");
+        logger.LogInformation("Scanning plugins directory: {Dir} ({Count} DLL(s) found)", fullPluginsPath, dlls.Length);
 
-        foreach (var dll in Directory.GetFiles(pluginsDir, "*.dll"))
+        foreach (var dll in dlls)
         {
             try
             {

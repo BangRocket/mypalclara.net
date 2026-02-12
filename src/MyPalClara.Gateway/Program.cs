@@ -63,7 +63,10 @@ builder.Services.AddSingleton<MessageRouter>();
 var loggerFactory = LoggerFactory.Create(lb => lb.AddConsole());
 var startupLogger = loggerFactory.CreateLogger("Gateway.Startup");
 
-var pluginsDir = config.Gateway.PluginsDir ?? Path.Combine(AppContext.BaseDirectory, "plugins");
+// Resolve plugins dir relative to the executable (where MSBuild copies module DLLs)
+var pluginsDir = Path.IsPathRooted(config.Gateway.PluginsDir)
+    ? config.Gateway.PluginsDir
+    : Path.Combine(AppContext.BaseDirectory, config.Gateway.PluginsDir);
 var modules = ModuleLoader.DiscoverAndConfigure(builder.Services, builder.Configuration, pluginsDir, startupLogger);
 
 // If no memory module was loaded, register a null IMemoryService
