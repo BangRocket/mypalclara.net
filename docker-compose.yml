@@ -16,6 +16,7 @@ services:
     restart: unless-stopped
     ports:
       - "6480:6379"
+      - "3000:3000"
     volumes:
       - clara_falkor_data:/data
     command: >
