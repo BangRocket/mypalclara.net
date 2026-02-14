@@ -1,0 +1,103 @@
+@page "/settings"
+@rendermode InteractiveServer
+@using MyPalClara.Core.Configuration
+
+@inject ClaraConfig Config
+
+<PageTitle>Clara - Settings</PageTitle>
+
+<h1>Settings</h1>
+
+<div class="info-panel">
+    <p>Read-only view of the active configuration. Edit <code>appsettings.json</code> or <code>clara.yaml</code> and restart to apply changes.</p>
+</div>
+
+<h2>General</h2>
+<table class="settings-table">
+    <tbody>
+        <tr><td>User ID</td><td>@Config.UserId</td></tr>
+        <tr><td>Default Project</td><td>@Config.DefaultProject</td></tr>
+        <tr><td>Timezone</td><td>@Config.DefaultTimezone</td></tr>
+        <tr><td>Data Directory</td><td>@Config.DataDir</td></tr>
+    </tbody>
+</table>
+
+<h2>LLM</h2>
+<table class="settings-table">
+    <tbody>
+        <tr><td>Provider</td><td>@Config.Llm.Provider</td></tr>
+        <tr><td>Model</td><td>@Config.Llm.ActiveProvider.Model</td></tr>
+        <tr><td>Model (High)</td><td>@(string.IsNullOrEmpty(Config.Llm.ActiveProvider.ModelHigh) ? "(default)" : Config.Llm.ActiveProvider.ModelHigh)</td></tr>
+        <tr><td>Model (Mid)</td><td>@(string.IsNullOrEmpty(Config.Llm.ActiveProvider.ModelMid) ? "(default)" : Config.Llm.ActiveProvider.ModelMid)</td></tr>
+        <tr><td>Model (Low)</td><td>@(string.IsNullOrEmpty(Config.Llm.ActiveProvider.ModelLow) ? "(default)" : Config.Llm.ActiveProvider.ModelLow)</td></tr>
+        <tr><td>API Key</td><td>@Mask(Config.Llm.ActiveProvider.ApiKey)</td></tr>
+    </tbody>
+</table>
+
+<h2>Database</h2>
+<table class="settings-table">
+    <tbody>
+        <tr><td>URL</td><td>@MaskUrl(Config.Database.Url)</td></tr>
+    </tbody>
+</table>
+
+<h2>Memory</h2>
+<table class="settings-table">
+    <tbody>
+        <tr><td>Redis URL</td><td>@MaskUrl(Config.Memory.RedisUrl)</td></tr>
+        <tr><td>Embedding Provider</td><td>@Config.Memory.Embedding.Provider</td></tr>
+        <tr><td>Embedding Model</td><td>@Config.Memory.Embedding.Model</td></tr>
+        <tr><td>Graph Store</td><td>@Config.Memory.GraphStore.Provider</td></tr>
+    </tbody>
+</table>
+
+<h2>Gateway</h2>
+<table class="settings-table">
+    <tbody>
+        <tr><td>Host</td><td>@Config.Gateway.Host</td></tr>
+        <tr><td>Port</td><td>@Config.Gateway.Port</td></tr>
+        <tr><td>Max Tool Iterations</td><td>@Config.Gateway.MaxToolIterations</td></tr>
+        <tr><td>Auto-Continue</td><td>@Config.Gateway.AutoContinueEnabled (max @Config.Gateway.AutoContinueMax)</td></tr>
+        <tr><td>Plugins Directory</td><td>@Config.Gateway.PluginsDir</td></tr>
+    </tbody>
+</table>
+
+<h2>MCP</h2>
+<table class="settings-table">
+    <tbody>
+        <tr><td>Servers Directory</td><td>@Config.Mcp.ServersDir</td></tr>
+    </tbody>
+</table>
+
+@code {
+    private static string Mask(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "(not set)";
+        if (value.Length <= 8) return "****";
+        return value[..4] + "..." + value[^4..];
+    }
+
+    private static string MaskUrl(string? value)
+    {
+        if (string.IsNullOrEmpty(value)) return "(not set)";
+        // Mask password portion of connection strings
+        try
+        {
+            var idx = value.IndexOf("://", StringComparison.Ordinal);
+            if (idx > 0)
+            {
+                var afterScheme = value[(idx + 3)..];
+                var atIdx = afterScheme.IndexOf('@');
+                if (atIdx > 0)
+                {
+                    var scheme = value[..(idx + 3)];
+                    var hostPart = afterScheme[(atIdx)..];
+                    return scheme + "****" + hostPart;
+                }
+            }
+        }
+        catch { /* fallback below */ }
+
+        return Mask(value);
+    }
+}

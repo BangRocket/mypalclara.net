@@ -20,4 +20,9 @@ public sealed class ClaraConfig
     public VoiceSettings Voice { get; set; } = new();
     public DiscordSettings Discord { get; set; } = new();
     public SshSettings Ssh { get; set; } = new();
+    public SkillsSettings Skills { get; set; } = new();
+    public TelegramSettings Telegram { get; set; } = new();
+    public SlackSettings Slack { get; set; } = new();
+    public WhatsAppSettings WhatsApp { get; set; } = new();
+    public BrowserSettings Browser { get; set; } = new();
 }

@@ -1,0 +1,103 @@
+@page "/memory"
+@rendermode InteractiveServer
+@using MyPalClara.Core.Configuration
+@using MyPalClara.Core.Identity
+@using MyPalClara.Core.Memory
+
+@inject IMemoryService? Memory
+@inject ClaraConfig Config
+@inject UserIdentityService Identity
+
+<PageTitle>Clara - Memory</PageTitle>
+
+<h1>Memory Browser</h1>
+
+@if (Memory is null)
+{
+    <div class="info-panel">
+        <p>Memory service is not available. The memory module may not be loaded.</p>
+    </div>
+}
+else
+{
+    <div class="search-bar">
+        <input type="text"
+               placeholder="Search memories..."
+               @bind="_query"
+               @bind:event="oninput"
+               @onkeydown="HandleKeyDown" />
+        <button @onclick="Search" disabled="@_isSearching">Search</button>
+    </div>
+
+    @if (_isSearching)
+    {
+        <p class="loading">Searching...</p>
+    }
+
+    @if (_results is not null)
+    {
+        <p class="result-count">@_results.Count result(s)</p>
+
+        <div class="memory-list">
+            @foreach (var item in _results)
+            {
+                <div class="memory-item @(item.IsKey ? "key-memory" : "")">
+                    <div class="memory-header">
+                        <span class="memory-category">@(item.Category ?? "general")</span>
+                        <span class="memory-score">Score: @item.Score.ToString("F3")</span>
+                        @if (item.IsKey)
+                        {
+                            <span class="badge key">KEY</span>
+                        }
+                    </div>
+                    <div class="memory-text">@item.Memory</div>
+                    <div class="memory-footer">
+                        <span class="memory-id">@item.Id[..8]...</span>
+                        @if (item.CreatedAt is not null)
+                        {
+                            <span class="memory-date">@item.CreatedAt.Value.ToString("yyyy-MM-dd HH:mm")</span>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    }
+}
+
+@code {
+    private string _query = "";
+    private bool _isSearching;
+    private List<MemoryItem>? _results;
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+            await Search();
+    }
+
+    private async Task Search()
+    {
+        if (Memory is null || string.IsNullOrWhiteSpace(_query))
+            return;
+
+        _isSearching = true;
+        StateHasChanged();
+
+        try
+        {
+            var userIds = await Identity.ResolveAllUserIdsAsync(Config.UserId);
+            _results = await Memory.SearchAsync(_query, userIds, 20);
+        }
+        catch (Exception ex)
+        {
+            _results = [];
+            // Display error inline via an empty result set; the user sees "0 result(s)"
+            Console.Error.WriteLine($"Memory search failed: {ex.Message}");
+        }
+        finally
+        {
+            _isSearching = false;
+            StateHasChanged();
+        }
+    }
+}

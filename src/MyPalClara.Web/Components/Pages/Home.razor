@@ -1,0 +1,74 @@
+@page "/"
+@rendermode InteractiveServer
+@using MyPalClara.Core.Configuration
+@using MyPalClara.Core.Memory
+@using MyPalClara.Agent.Mcp
+
+@inject ClaraConfig Config
+@inject McpServerManager McpManager
+@inject IMemoryService? Memory
+
+<PageTitle>Clara - Dashboard</PageTitle>
+
+<h1>Dashboard</h1>
+
+<div class="dashboard-grid">
+    <div class="card">
+        <h3>LLM Provider</h3>
+        <div class="card-value">@Config.Llm.Provider</div>
+        <div class="card-detail">Model: @Config.Llm.ActiveProvider.Model</div>
+    </div>
+
+    <div class="card">
+        <h3>Memory</h3>
+        <div class="card-value">@(Memory is not null ? "Active" : "Unavailable")</div>
+        <div class="card-detail">@(Memory is not null ? "Memory pipeline enabled" : "No memory module loaded")</div>
+    </div>
+
+    <div class="card">
+        <h3>MCP Servers</h3>
+        <div class="card-value">@_mcpServerCount</div>
+        <div class="card-detail">@_mcpToolCount tools available</div>
+    </div>
+
+    <div class="card">
+        <h3>User</h3>
+        <div class="card-value">@Config.UserId</div>
+        <div class="card-detail">Timezone: @Config.DefaultTimezone</div>
+    </div>
+</div>
+
+@if (_mcpServers.Count > 0)
+{
+    <h2>MCP Server Details</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>Server</th>
+                <th>Tools</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var (name, toolCount) in _mcpServers)
+            {
+                <tr>
+                    <td>@name</td>
+                    <td>@toolCount</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private int _mcpServerCount;
+    private int _mcpToolCount;
+    private IReadOnlyDictionary<string, int> _mcpServers = new Dictionary<string, int>();
+
+    protected override void OnInitialized()
+    {
+        _mcpServers = McpManager.GetServerStatus();
+        _mcpServerCount = _mcpServers.Count;
+        _mcpToolCount = _mcpServers.Values.Sum();
+    }
+}

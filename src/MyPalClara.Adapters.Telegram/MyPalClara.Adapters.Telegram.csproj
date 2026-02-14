@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MyPalClara.Adapters.Telegram</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MyPalClara.Core\MyPalClara.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
+    <PackageReference Include="Telegram.Bot" Version="22.7.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\MyPalClara.Gateway\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\MyPalClara.Gateway\appsettings.json')" />
+  </ItemGroup>
+
+</Project>

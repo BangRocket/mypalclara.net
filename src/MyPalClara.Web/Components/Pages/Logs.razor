@@ -1,0 +1,35 @@
+@page "/logs"
+@rendermode InteractiveServer
+
+<PageTitle>Clara - Logs</PageTitle>
+
+<h1>Live Logs</h1>
+
+<div class="info-panel">
+    <p>Connect to <code>/hubs/dashboard</code> via SignalR for real-time log streaming.</p>
+    <p>This page will display live log entries when the SignalR push integration is enabled.</p>
+</div>
+
+<div class="log-viewer">
+    @if (_logEntries.Count == 0)
+    {
+        <p class="muted">No log entries yet. Waiting for activity...</p>
+    }
+    else
+    {
+        @foreach (var entry in _logEntries)
+        {
+            <div class="log-entry @entry.Level">
+                <span class="log-time">@entry.Timestamp.ToString("HH:mm:ss.fff")</span>
+                <span class="log-level">@entry.Level.ToUpperInvariant()</span>
+                <span class="log-message">@entry.Message</span>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private readonly List<LogEntry> _logEntries = [];
+
+    private sealed record LogEntry(DateTime Timestamp, string Level, string Message);
+}

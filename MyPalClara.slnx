@@ -1,13 +1,28 @@
 <Solution>
   <Folder Name="/src/">
     <Project Path="src/MyPalClara.Core/MyPalClara.Core.csproj" />
+    <Project Path="src/MyPalClara.Agent/MyPalClara.Agent.csproj" />
     <Project Path="src/MyPalClara.Gateway/MyPalClara.Gateway.csproj" />
     <Project Path="src/MyPalClara.Memory/MyPalClara.Memory.csproj" />
     <Project Path="src/MyPalClara.Voice/MyPalClara.Voice.csproj" />
-    <Project Path="src/MyPalClara.Cli/MyPalClara.Cli.csproj" />
-    <Project Path="src/MyPalClara.Discord/MyPalClara.Discord.csproj" />
-    <Project Path="src/MyPalClara.Ssh/MyPalClara.Ssh.csproj" />
+    <Project Path="src/MyPalClara.Skills/MyPalClara.Skills.csproj" />
+    <Project Path="src/MyPalClara.Web/MyPalClara.Web.csproj" />
+    <Project Path="src/MyPalClara.Browser/MyPalClara.Browser.csproj" />
+    <Project Path="src/MyPalClara.Adapters.Cli/MyPalClara.Adapters.Cli.csproj" />
+    <Project Path="src/MyPalClara.Adapters.Discord/MyPalClara.Adapters.Discord.csproj" />
+    <Project Path="src/MyPalClara.Adapters.Ssh/MyPalClara.Adapters.Ssh.csproj" />
+    <Project Path="src/MyPalClara.Adapters.Telegram/MyPalClara.Adapters.Telegram.csproj" />
+    <Project Path="src/MyPalClara.Adapters.Slack/MyPalClara.Adapters.Slack.csproj" />
+    <Project Path="src/MyPalClara.Adapters.WhatsApp/MyPalClara.Adapters.WhatsApp.csproj" />
     <Project Path="src/MyPalClara.Tools/MyPalClara.Tools.csproj" />
+    <Project Path="src/MyPalClara.App.Terminal/MyPalClara.App.Terminal.csproj" />
+    <Project Path="src/MyPalClara.App.Windows/MyPalClara.App.Windows.csproj" />
+    <Project Path="src/MyPalClara.Media/MyPalClara.Media.csproj" />
   </Folder>
-
+  <Folder Name="/tests/">
+    <Project Path="tests/MyPalClara.Core.Tests/MyPalClara.Core.Tests.csproj" />
+    <Project Path="tests/MyPalClara.Agent.Tests/MyPalClara.Agent.Tests.csproj" />
+    <Project Path="tests/MyPalClara.Skills.Tests/MyPalClara.Skills.Tests.csproj" />
+    <Project Path="tests/MyPalClara.Memory.Tests/MyPalClara.Memory.Tests.csproj" />
+  </Folder>
 </Solution>

@@ -10,8 +10,8 @@ using MyPalClara.Core.Memory;
 using MyPalClara.Core.Orchestration;
 using MyPalClara.Core.Personality;
 using MyPalClara.Core.Protocol;
-using MyPalClara.Gateway.Mcp;
-using MyPalClara.Gateway.Orchestration;
+using MyPalClara.Agent.Mcp;
+using MyPalClara.Agent.Orchestration;
 using MyPalClara.Gateway.Sessions;
 using Microsoft.Extensions.Logging;
 

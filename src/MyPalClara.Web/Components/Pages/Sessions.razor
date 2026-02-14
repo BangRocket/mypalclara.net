@@ -1,0 +1,32 @@
+@page "/sessions"
+@rendermode InteractiveServer
+
+<PageTitle>Clara - Sessions</PageTitle>
+
+<h1>Sessions</h1>
+
+<div class="info-panel">
+    <p>
+        The Web UI uses in-process chat via <code>WebChatService</code>.
+        External adapter sessions are managed by the Gateway process.
+    </p>
+    <p>No external adapter sessions are tracked from this process.</p>
+</div>
+
+<h2>In-Process Chat</h2>
+<table>
+    <thead>
+        <tr>
+            <th>Adapter</th>
+            <th>Type</th>
+            <th>Status</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Web UI</td>
+            <td>web</td>
+            <td><span class="badge active">Active</span></td>
+        </tr>
+    </tbody>
+</table>

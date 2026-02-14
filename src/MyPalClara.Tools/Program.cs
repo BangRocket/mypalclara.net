@@ -4,7 +4,7 @@ using MyPalClara.Core.Data;
 using MyPalClara.Core.Identity;
 using MyPalClara.Core.Llm;
 using MyPalClara.Core.Memory;
-using MyPalClara.Gateway.Llm;
+using MyPalClara.Agent.Llm;
 using MyPalClara.Memory;
 using MyPalClara.Tools.Backfill;
 using Microsoft.EntityFrameworkCore;

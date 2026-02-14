@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MyPalClara.Web</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MyPalClara.Agent\MyPalClara.Agent.csproj" />
+    <ProjectReference Include="..\MyPalClara.Core\MyPalClara.Core.csproj" />
+    <ProjectReference Include="..\MyPalClara.Skills\MyPalClara.Skills.csproj" />
+    <!-- Build-only dep: ensures Memory module builds + copies to plugins/ -->
+    <ProjectReference Include="..\MyPalClara.Memory\MyPalClara.Memory.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+<ItemGroup>
+    <None Include="..\MyPalClara.Gateway\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\MyPalClara.Gateway\appsettings.json')" />
+  </ItemGroup>
+
+</Project>

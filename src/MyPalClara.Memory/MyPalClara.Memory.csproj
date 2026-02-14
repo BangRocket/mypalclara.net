@@ -23,4 +23,24 @@
     <Copy SourceFiles="$(TargetDir)MyPalClara.Memory.deps.json" DestinationFolder="$(GatewayPluginsDir)" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)MyPalClara.Memory.deps.json')" />
   </Target>
 
+  <!-- Also copy to Agent plugins/ for projects that host Agent directly (e.g. Web) -->
+  <Target Name="CopyToAgentPlugins" AfterTargets="Build">
+    <PropertyGroup>
+      <AgentPluginsDir>$(MSBuildThisFileDirectory)..\MyPalClara.Agent\bin\$(Configuration)\$(TargetFramework)\plugins\</AgentPluginsDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(AgentPluginsDir)" />
+    <Copy SourceFiles="$(TargetDir)MyPalClara.Memory.dll" DestinationFolder="$(AgentPluginsDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetDir)MyPalClara.Memory.deps.json" DestinationFolder="$(AgentPluginsDir)" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)MyPalClara.Memory.deps.json')" />
+  </Target>
+
+  <!-- Copy to Web plugins/ for Blazor Server deployment -->
+  <Target Name="CopyToWebPlugins" AfterTargets="Build">
+    <PropertyGroup>
+      <WebPluginsDir>$(MSBuildThisFileDirectory)..\MyPalClara.Web\bin\$(Configuration)\$(TargetFramework)\plugins\</WebPluginsDir>
+    </PropertyGroup>
+    <MakeDir Directories="$(WebPluginsDir)" />
+    <Copy SourceFiles="$(TargetDir)MyPalClara.Memory.dll" DestinationFolder="$(WebPluginsDir)" SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(TargetDir)MyPalClara.Memory.deps.json" DestinationFolder="$(WebPluginsDir)" SkipUnchangedFiles="true" Condition="Exists('$(TargetDir)MyPalClara.Memory.deps.json')" />
+  </Target>
+
 </Project>

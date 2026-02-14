@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MyPalClara.Adapters.Cli</RootNamespace>
+    <InformationalVersion>dev</InformationalVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MyPalClara.Core\MyPalClara.Core.csproj" />
+    <ProjectReference Include="..\MyPalClara.Voice\MyPalClara.Voice.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.3" />
+    <PackageReference Include="Spectre.Console" Version="0.54.0" />
+  </ItemGroup>
+
+  <!-- GitDate versioning: YYYY.MM.DD.shorthash -->
+  <Target Name="SetGitDateVersion" BeforeTargets="GenerateAssemblyInfo" Condition="'$(DesignTimeBuild)' != 'true'">
+    <Exec Command="git log -1 --date=format:%25Y.%25m.%25d --format=%25cd" ConsoleToMsBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitCommitDate" />
+    </Exec>
+    <Exec Command="git log -1 --format=%25h" ConsoleToMsBuild="true" StandardOutputImportance="low" IgnoreExitCode="true">
+      <Output TaskParameter="ConsoleOutput" PropertyName="GitShortHash" />
+    </Exec>
+    <PropertyGroup Condition="'$(GitCommitDate)' != '' And '$(GitShortHash)' != ''">
+      <InformationalVersion>$(GitCommitDate).$(GitShortHash)</InformationalVersion>
+    </PropertyGroup>
+  </Target>
+
+</Project>

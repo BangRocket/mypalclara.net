@@ -1,0 +1,50 @@
+@page "/channels"
+@rendermode InteractiveServer
+@using MyPalClara.Core.Configuration
+
+@inject ClaraConfig Config
+
+<PageTitle>Clara - Channels</PageTitle>
+
+<h1>Channels</h1>
+
+<div class="info-panel">
+    <p>Configured adapter channels and their settings.</p>
+</div>
+
+<table>
+    <thead>
+        <tr>
+            <th>Adapter</th>
+            <th>Type</th>
+            <th>Details</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Web UI</td>
+            <td>web / dm</td>
+            <td>In-process chat (this dashboard)</td>
+        </tr>
+        <tr>
+            <td>CLI</td>
+            <td>cli / dm</td>
+            <td>Console REPL via Clara.Cli</td>
+        </tr>
+        @if (!string.IsNullOrEmpty(Config.Discord.BotToken))
+        {
+            <tr>
+                <td>Discord</td>
+                <td>discord / guild</td>
+                <td>
+                    Servers: @(string.IsNullOrWhiteSpace(Config.Discord.AllowedServers) ? "0" : Config.Discord.AllowedServers.Split(',', StringSplitOptions.RemoveEmptyEntries).Length.ToString()) configured
+                </td>
+            </tr>
+        }
+        <tr>
+            <td>Gateway WS</td>
+            <td>websocket / varies</td>
+            <td>Host: @Config.Gateway.Host:@Config.Gateway.Port</td>
+        </tr>
+    </tbody>
+</table>

@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>MyPalClara.App.Terminal</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MyPalClara.Core\MyPalClara.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="10.0.3" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Console" Version="10.0.3" />
+    <PackageReference Include="Spectre.Console" Version="0.50.0" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\MyPalClara.Gateway\appsettings.json" Link="appsettings.json" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\MyPalClara.Gateway\appsettings.json')" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MyPalClara.Media</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MyPalClara.Core\MyPalClara.Core.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="PdfPig" Version="0.1.9" />
+  </ItemGroup>
+</Project>

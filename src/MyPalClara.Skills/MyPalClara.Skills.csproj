@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>MyPalClara.Skills</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\MyPalClara.Core\MyPalClara.Core.csproj" />
+    <ProjectReference Include="..\MyPalClara.Agent\MyPalClara.Agent.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+
+  <!-- Copy bundled skills to output -->
+  <ItemGroup>
+    <Content Include="..\..\skills\*.skill.md" Link="skills\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

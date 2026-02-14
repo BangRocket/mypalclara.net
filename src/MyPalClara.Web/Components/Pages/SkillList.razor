@@ -1,0 +1,65 @@
+@page "/skills"
+@rendermode InteractiveServer
+@using MyPalClara.Skills
+
+@inject SkillRegistry Registry
+
+<PageTitle>Clara - Skills</PageTitle>
+
+<h1>Skills</h1>
+
+@if (_skills.Count == 0)
+{
+    <div class="info-panel">
+        <p>No skills loaded. Place <code>*.skill.md</code> files in the skills directory to enable skills.</p>
+    </div>
+}
+else
+{
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Version</th>
+                <th>Description</th>
+                <th>Triggers</th>
+                <th>Required Tools</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var skill in _skills)
+            {
+                <tr>
+                    <td><strong>@skill.Name</strong></td>
+                    <td>@skill.Version</td>
+                    <td>@skill.Description</td>
+                    <td>
+                        @foreach (var trigger in skill.Triggers)
+                        {
+                            <code class="trigger-pattern">@trigger.Pattern</code>
+                        }
+                    </td>
+                    <td>
+                        @if (skill.ToolsRequired.Count > 0)
+                        {
+                            @string.Join(", ", skill.ToolsRequired)
+                        }
+                        else
+                        {
+                            <span class="muted">none</span>
+                        }
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private IReadOnlyList<SkillDefinition> _skills = [];
+
+    protected override void OnInitialized()
+    {
+        _skills = Registry.GetAll();
+    }
+}

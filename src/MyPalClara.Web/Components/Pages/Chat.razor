@@ -1,0 +1,152 @@
+@page "/chat"
+@rendermode InteractiveServer
+@using MyPalClara.Core.Orchestration
+@using MyPalClara.Web.Services
+@implements IDisposable
+
+@inject WebChatService ChatService
+
+<PageTitle>Clara - Chat</PageTitle>
+
+<h1>Chat</h1>
+
+<div class="chat-container">
+    <div class="chat-messages" @ref="_messagesDiv">
+        @foreach (var msg in _messages)
+        {
+            <div class="chat-message @msg.CssClass">
+                <div class="chat-role">@msg.Role</div>
+                <div class="chat-text">@msg.Text</div>
+            </div>
+        }
+        @if (_isStreaming)
+        {
+            <div class="chat-message assistant">
+                <div class="chat-role">Clara</div>
+                <div class="chat-text">@_streamingText</div>
+            </div>
+        }
+    </div>
+
+    <div class="chat-input-area">
+        <input type="text"
+               class="chat-input"
+               placeholder="Type a message..."
+               @bind="_inputText"
+               @bind:event="oninput"
+               @onkeydown="HandleKeyDown"
+               disabled="@_isStreaming" />
+        <button class="chat-send" @onclick="SendMessage" disabled="@(_isStreaming || string.IsNullOrWhiteSpace(_inputText))">
+            Send
+        </button>
+    </div>
+</div>
+
+@if (_toolEvents.Count > 0)
+{
+    <div class="tool-activity">
+        <h3>Tool Activity</h3>
+        @foreach (var tool in _toolEvents)
+        {
+            <div class="tool-event @(tool.Success ? "success" : "error")">
+                <span class="tool-name">@tool.Name</span>
+                <span class="tool-status">@(tool.Success ? "OK" : "FAIL")</span>
+                @if (!string.IsNullOrEmpty(tool.Preview))
+                {
+                    <span class="tool-preview">@tool.Preview</span>
+                }
+            </div>
+        }
+    </div>
+}
+
+@code {
+    private string _inputText = "";
+    private string _streamingText = "";
+    private bool _isStreaming;
+    private readonly List<ChatDisplayMessage> _messages = [];
+    private readonly List<ToolDisplayEvent> _toolEvents = [];
+    private CancellationTokenSource? _cts;
+    private ElementReference _messagesDiv;
+
+    private async Task HandleKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter" && !_isStreaming && !string.IsNullOrWhiteSpace(_inputText))
+            await SendMessage();
+    }
+
+    private async Task SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(_inputText) || _isStreaming)
+            return;
+
+        var message = _inputText.Trim();
+        _inputText = "";
+        _isStreaming = true;
+        _streamingText = "";
+        _toolEvents.Clear();
+
+        _messages.Add(new ChatDisplayMessage("You", message, "user"));
+        StateHasChanged();
+
+        _cts = new CancellationTokenSource();
+
+        try
+        {
+            await foreach (var evt in ChatService.ChatAsync(message, null, _cts.Token))
+            {
+                switch (evt)
+                {
+                    case TextChunkEvent textChunk:
+                        _streamingText += textChunk.Text;
+                        StateHasChanged();
+                        break;
+
+                    case ToolStartEvent toolStart:
+                        _toolEvents.Add(new ToolDisplayEvent(toolStart.ToolName, true, null));
+                        StateHasChanged();
+                        break;
+
+                    case ToolResultEvent toolResult:
+                        // Update the last matching tool event
+                        var idx = _toolEvents.FindLastIndex(t => t.Name == toolResult.ToolName);
+                        if (idx >= 0)
+                            _toolEvents[idx] = new ToolDisplayEvent(toolResult.ToolName, toolResult.Success, toolResult.OutputPreview);
+                        StateHasChanged();
+                        break;
+
+                    case CompleteEvent:
+                        _messages.Add(new ChatDisplayMessage("Clara", _streamingText, "assistant"));
+                        _streamingText = "";
+                        break;
+                }
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            if (!string.IsNullOrEmpty(_streamingText))
+            {
+                _messages.Add(new ChatDisplayMessage("Clara", _streamingText + " [cancelled]", "assistant"));
+                _streamingText = "";
+            }
+        }
+        catch (Exception ex)
+        {
+            _messages.Add(new ChatDisplayMessage("System", $"Error: {ex.Message}", "error"));
+        }
+        finally
+        {
+            _isStreaming = false;
+            StateHasChanged();
+        }
+    }
+
+    public void Dispose()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+    }
+
+    private sealed record ChatDisplayMessage(string Role, string Text, string CssClass);
+    private sealed record ToolDisplayEvent(string Name, bool Success, string? Preview);
+}
