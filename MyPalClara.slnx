@@ -14,6 +14,7 @@
     <Project Path="src/MyPalClara.Adapters.Telegram/MyPalClara.Adapters.Telegram.csproj" />
     <Project Path="src/MyPalClara.Adapters.Slack/MyPalClara.Adapters.Slack.csproj" />
     <Project Path="src/MyPalClara.Adapters.WhatsApp/MyPalClara.Adapters.WhatsApp.csproj" />
+    <Project Path="src/MyPalClara.Adapters.Signal/MyPalClara.Adapters.Signal.csproj" />
     <Project Path="src/MyPalClara.Tools/MyPalClara.Tools.csproj" />
     <Project Path="src/MyPalClara.App.Terminal/MyPalClara.App.Terminal.csproj" />
     <Project Path="src/MyPalClara.App.Windows/MyPalClara.App.Windows.csproj" />

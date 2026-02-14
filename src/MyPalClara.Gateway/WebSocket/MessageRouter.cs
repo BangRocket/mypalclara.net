@@ -12,6 +12,7 @@ using MyPalClara.Core.Personality;
 using MyPalClara.Core.Protocol;
 using MyPalClara.Agent.Mcp;
 using MyPalClara.Agent.Orchestration;
+using MyPalClara.Gateway.Routing;
 using MyPalClara.Gateway.Sessions;
 using Microsoft.Extensions.Logging;
 
@@ -31,6 +32,8 @@ public sealed class MessageRouter
     private readonly LlmOrchestrator _orchestrator;
     private readonly McpServerManager _mcp;
     private readonly IMemoryService? _memory;
+    private readonly SessionCompactor? _compactor;
+    private readonly AgentRouter? _agentRouter;
     private readonly ILogger<MessageRouter> _logger;
 
     private static readonly JsonSerializerOptions JsonOpts = new()
@@ -48,7 +51,9 @@ public sealed class MessageRouter
         LlmOrchestrator orchestrator,
         McpServerManager mcp,
         IMemoryService? memory,
-        ILogger<MessageRouter> logger)
+        ILogger<MessageRouter> logger,
+        SessionCompactor? compactor = null,
+        AgentRouter? agentRouter = null)
     {
         _config = config;
         _connections = connections;
@@ -58,6 +63,8 @@ public sealed class MessageRouter
         _orchestrator = orchestrator;
         _mcp = mcp;
         _memory = memory;
+        _compactor = compactor;
+        _agentRouter = agentRouter;
         _logger = logger;
     }
 
@@ -227,15 +234,25 @@ public sealed class MessageRouter
             // User message
             messages.Add(new UserMessage(chat.Content));
 
-            // 6. Get MCP tool schemas
+            // 6. Resolve agent profile for multi-agent routing
+            var profile = _agentRouter?.ResolveProfile(session.AdapterType, chat.ChannelId);
+            string? modelOverride = null;
+            if (profile is not null && !string.IsNullOrEmpty(profile.Model))
+                modelOverride = profile.Model;
+
+            // 7. Compact if needed
+            if (_config.Gateway.CompactionEnabled && _compactor is not null)
+                messages = await _compactor.CompactIfNeededAsync(messages, ct);
+
+            // 8. Get MCP tool schemas
             var tools = _mcp.GetAllToolSchemas();
 
-            // 7. Stream orchestrator events → WebSocket responses
+            // 9. Stream orchestrator events → WebSocket responses
             var fullText = "";
             var toolCount = 0;
 
             await foreach (var evt in _orchestrator.GenerateWithToolsAsync(
-                messages, tools, chat.Tier, ct: ct))
+                messages, tools, chat.Tier, modelOverride: modelOverride, ct: ct))
             {
                 switch (evt)
                 {
@@ -259,12 +276,12 @@ public sealed class MessageRouter
                 }
             }
 
-            // 8. Update session history
+            // 9. Update session history
             channelSession.AddMessages(
                 new UserMessage(chat.Content),
                 new AssistantMessage(fullText));
 
-            // 9. Background: persist chat + memory
+            // 10. Background: persist chat + memory
             if (channelSession.ConversationId is not null)
             {
                 _ = Task.Run(async () =>

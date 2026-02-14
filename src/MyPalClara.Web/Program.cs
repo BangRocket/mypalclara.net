@@ -41,12 +41,11 @@ builder.Services.AddSingleton<ChatHistoryService>();
 
 // -- LLM ----------------------------------------------------------------
 builder.Services.AddSingleton<LlmCallLogger>();
-builder.Services.AddHttpClient<ILlmProvider, AnthropicProvider>();
 
-if (!config.Llm.Provider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))
-{
+if (config.Llm.Provider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddHttpClient<ILlmProvider, AnthropicProvider>();
+else
     builder.Services.AddHttpClient<ILlmProvider, OpenAiProvider>();
-}
 
 builder.Services.AddHttpClient<RookProvider>();
 
@@ -55,6 +54,7 @@ builder.Services.AddSingleton<McpConfigLoader>();
 builder.Services.AddSingleton<McpServerManager>();
 
 // -- Orchestration ------------------------------------------------------
+builder.Services.AddSingleton<ToolPolicyEvaluator>();
 builder.Services.AddSingleton<ToolExecutor>();
 builder.Services.AddSingleton<LlmOrchestrator>();
 

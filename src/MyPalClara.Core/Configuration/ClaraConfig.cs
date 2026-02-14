@@ -25,4 +25,8 @@ public sealed class ClaraConfig
     public SlackSettings Slack { get; set; } = new();
     public WhatsAppSettings WhatsApp { get; set; } = new();
     public BrowserSettings Browser { get; set; } = new();
+    public ToolSecuritySettings ToolSecurity { get; set; } = new();
+    public SchedulerSettings Scheduler { get; set; } = new();
+    public AgentSettings Agents { get; set; } = new();
+    public SignalSettings Signal { get; set; } = new();
 }

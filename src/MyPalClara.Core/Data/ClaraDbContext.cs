@@ -17,6 +17,7 @@ public class ClaraDbContext : DbContext
     public DbSet<DiscordGuildEntity> DiscordGuilds => Set<DiscordGuildEntity>();
     public DbSet<DiscordChannelDetailEntity> DiscordChannelDetails => Set<DiscordChannelDetailEntity>();
     public DbSet<MemoryHistoryEntity> MemoryHistory => Set<MemoryHistoryEntity>();
+    public DbSet<ToolCallEntity> ToolCalls => Set<ToolCallEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -101,6 +102,14 @@ public class ClaraDbContext : DbContext
             e.HasIndex(x => x.MemoryId);
             e.HasIndex(x => x.UserId);
             e.HasIndex(x => x.CreatedAt);
+        });
+
+        // ToolCalls
+        modelBuilder.Entity<ToolCallEntity>(e =>
+        {
+            e.HasIndex(x => x.ToolName);
+            e.HasIndex(x => x.CreatedAt);
+            e.HasIndex(x => x.ConversationId);
         });
     }
 }

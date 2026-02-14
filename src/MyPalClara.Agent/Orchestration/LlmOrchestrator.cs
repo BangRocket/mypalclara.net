@@ -54,11 +54,12 @@ public sealed class LlmOrchestrator
         IReadOnlyList<ToolSchema> tools,
         string? tier = null,
         int autoContinueCount = 0,
+        string? modelOverride = null,
         [EnumeratorCancellation] CancellationToken ct = default)
     {
         var maxIterations = _config.Gateway.MaxToolIterations;
         var maxResultChars = _config.Gateway.MaxToolResultChars;
-        var model = _config.Llm.ModelForTier(tier);
+        var model = modelOverride ?? _config.Llm.ModelForTier(tier);
 
         var workingMessages = new List<ChatMessage>(messages);
         int totalToolsRun = 0;
@@ -95,7 +96,7 @@ public sealed class LlmOrchestrator
 
                         // Recurse
                         await foreach (var evt in GenerateWithToolsAsync(
-                            workingMessages, tools, tier, autoContinueCount + 1, ct))
+                            workingMessages, tools, tier, autoContinueCount + 1, modelOverride, ct))
                         {
                             if (evt is CompleteEvent complete)
                             {

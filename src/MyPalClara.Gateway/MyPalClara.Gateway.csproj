@@ -6,6 +6,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Cronos" Version="0.8.4" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\MyPalClara.Agent\MyPalClara.Agent.csproj" />
     <!-- Build-only dep: ensures Memory module builds + copies to plugins/ without a compile-time reference -->
     <ProjectReference Include="..\MyPalClara.Memory\MyPalClara.Memory.csproj" ReferenceOutputAssembly="false" />

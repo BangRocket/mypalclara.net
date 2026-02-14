@@ -20,6 +20,7 @@ COPY src/MyPalClara.Adapters.Ssh/MyPalClara.Adapters.Ssh.csproj src/MyPalClara.A
 COPY src/MyPalClara.Adapters.Telegram/MyPalClara.Adapters.Telegram.csproj src/MyPalClara.Adapters.Telegram/
 COPY src/MyPalClara.Adapters.Slack/MyPalClara.Adapters.Slack.csproj src/MyPalClara.Adapters.Slack/
 COPY src/MyPalClara.Adapters.WhatsApp/MyPalClara.Adapters.WhatsApp.csproj src/MyPalClara.Adapters.WhatsApp/
+COPY src/MyPalClara.Adapters.Signal/MyPalClara.Adapters.Signal.csproj src/MyPalClara.Adapters.Signal/
 COPY src/MyPalClara.Media/MyPalClara.Media.csproj src/MyPalClara.Media/
 COPY src/MyPalClara.App.Terminal/MyPalClara.App.Terminal.csproj src/MyPalClara.App.Terminal/
 COPY src/MyPalClara.Tools/MyPalClara.Tools.csproj src/MyPalClara.Tools/

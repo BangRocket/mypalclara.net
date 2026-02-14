@@ -11,6 +11,7 @@ namespace MyPalClara.Core.Protocol;
 [JsonDerivedType(typeof(AuthMessage), "auth")]
 [JsonDerivedType(typeof(ChatRequest), "chat")]
 [JsonDerivedType(typeof(CommandRequest), "command")]
+[JsonDerivedType(typeof(ToolApprovalResponse), "tool_approval_response")]
 public abstract record AdapterMessage;
 
 public sealed record AuthMessage(
@@ -33,6 +34,10 @@ public sealed record CommandRequest(
     Dictionary<string, JsonElement>? Args = null,
     string? UserId = null) : AdapterMessage;
 
+public sealed record ToolApprovalResponse(
+    string RequestId,
+    bool Approved) : AdapterMessage;
+
 // ========================
 // Gateway → Adapter
 // ========================
@@ -45,6 +50,7 @@ public sealed record CommandRequest(
 [JsonDerivedType(typeof(Complete), "complete")]
 [JsonDerivedType(typeof(CommandResult), "command_result")]
 [JsonDerivedType(typeof(ErrorMessage), "error")]
+[JsonDerivedType(typeof(ToolApprovalRequest), "tool_approval_request")]
 public abstract record GatewayResponse;
 
 public sealed record AuthResult(bool Success) : GatewayResponse;
@@ -64,3 +70,8 @@ public sealed record CommandResult(
     string? Error = null) : GatewayResponse;
 
 public sealed record ErrorMessage(string Message) : GatewayResponse;
+
+public sealed record ToolApprovalRequest(
+    string ToolName,
+    string Arguments,
+    string RequestId) : GatewayResponse;

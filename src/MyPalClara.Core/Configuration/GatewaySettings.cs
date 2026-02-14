@@ -13,4 +13,10 @@ public sealed class GatewaySettings
     public bool AutoContinueEnabled { get; set; } = true;
     public int AutoContinueMax { get; set; } = 1;
     public string PluginsDir { get; set; } = "plugins";
+
+    // Session compaction
+    public bool CompactionEnabled { get; set; } = true;
+    public int MaxContextTokens { get; set; } = 100_000;
+    public int CompactionThresholdTokens { get; set; } = 80_000;
+    public int CompactionTargetTokens { get; set; } = 40_000;
 }

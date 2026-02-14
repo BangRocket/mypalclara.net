@@ -399,10 +399,11 @@ public sealed class FalkorDbSemanticStore : ISemanticMemoryStore
             var db = await GetDbAsync();
 
             // Create vector index on Memory nodes
-            var vectorIndex = """
-                CREATE VECTOR INDEX FOR (m:Memory) ON (m.embedding)
-                OPTIONS {dimension:1536, similarityFunction:'cosine', M:32, efConstruction:200}
-                """;
+            var dim = _config.Memory.GraphStore.VectorDimension;
+            var sim = _config.Memory.GraphStore.SimilarityFunction;
+            var vectorIndex =
+                $"CREATE VECTOR INDEX FOR (m:Memory) ON (m.embedding) " +
+                $"OPTIONS {{dimension:{dim}, similarityFunction:'{sim}', M:32, efConstruction:200}}";
             await TryExecuteAsync(db, vectorIndex);
 
             // Scalar indexes for Memory

@@ -37,13 +37,11 @@ builder.Services.AddSingleton<ChatHistoryService>();
 
 // ── LLM ─────────────────────────────────────────────────────────
 builder.Services.AddSingleton<LlmCallLogger>();
-builder.Services.AddHttpClient<ILlmProvider, AnthropicProvider>();
 
-// Register OpenAI provider for when config says "openai"/"openrouter"/"nanogpt"
-if (!config.Llm.Provider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))
-{
+if (config.Llm.Provider.Equals("anthropic", StringComparison.OrdinalIgnoreCase))
+    builder.Services.AddHttpClient<ILlmProvider, AnthropicProvider>();
+else
     builder.Services.AddHttpClient<ILlmProvider, OpenAiProvider>();
-}
 
 builder.Services.AddHttpClient<RookProvider>();
 
@@ -52,8 +50,22 @@ builder.Services.AddSingleton<McpConfigLoader>();
 builder.Services.AddSingleton<McpServerManager>();
 
 // ── Orchestration ───────────────────────────────────────────────
+builder.Services.AddSingleton<ToolPolicyEvaluator>();
 builder.Services.AddSingleton<ToolExecutor>();
 builder.Services.AddSingleton<LlmOrchestrator>();
+
+// ── Multi-agent routing ─────────────────────────────────────────
+builder.Services.AddSingleton<MyPalClara.Agent.Llm.LlmProviderFactory>();
+builder.Services.AddSingleton<MyPalClara.Gateway.Routing.AgentRouter>();
+
+// ── Session compaction ──────────────────────────────────────────
+builder.Services.AddSingleton<MyPalClara.Gateway.Sessions.SessionCompactor>();
+
+// ── Scheduling ─────────────────────────────────────────────────
+builder.Services.AddSingleton<MyPalClara.Gateway.Scheduling.IScheduledJob, MyPalClara.Gateway.Scheduling.MemoryCleanupJob>();
+builder.Services.AddSingleton<MyPalClara.Gateway.Scheduling.IScheduledJob, MyPalClara.Gateway.Scheduling.ConversationArchivalJob>();
+builder.Services.AddSingleton<MyPalClara.Gateway.Scheduling.IScheduledJob, MyPalClara.Gateway.Scheduling.HealthCheckJob>();
+builder.Services.AddHostedService<MyPalClara.Gateway.Scheduling.CronService>();
 
 // ── WebSocket ───────────────────────────────────────────────────
 builder.Services.AddSingleton<ConnectionManager>();

@@ -47,6 +47,9 @@ public sealed class LlmSettings
     public ProviderSettings Nanogpt { get; set; } = new();
     public ProviderSettings Bedrock { get; set; } = new();
     public ProviderSettings Azure { get; set; } = new();
+    public ProviderSettings Ollama { get; set; } = new();
+    public ProviderSettings Gemini { get; set; } = new();
+    public ProviderSettings Deepseek { get; set; } = new();
 
     public CloudflareAccessSettings CloudflareAccess { get; set; } = new();
     public AutoTierSettings AutoTier { get; set; } = new();
@@ -60,6 +63,9 @@ public sealed class LlmSettings
         "nanogpt" => Nanogpt,
         "bedrock" => Bedrock,
         "azure" => Azure,
+        "ollama" => Ollama,
+        "gemini" => Gemini,
+        "deepseek" => Deepseek,
         _ => Anthropic,
     };
 

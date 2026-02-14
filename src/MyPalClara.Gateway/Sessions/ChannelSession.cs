@@ -24,8 +24,8 @@ public sealed class ChannelSession
     /// <summary>Maximum number of messages to keep in memory.</summary>
     public int MaxHistoryMessages { get; set; } = 50;
 
-    /// <summary>Maximum total character budget for history.</summary>
-    public int MaxHistoryChars { get; set; } = 80_000;
+    /// <summary>Maximum total token budget for history (estimated).</summary>
+    public int MaxHistoryTokens { get; set; } = 20_000;
 
     public DateTime LastActivity { get; set; } = DateTime.UtcNow;
 
@@ -44,18 +44,18 @@ public sealed class ChannelSession
         TrimHistory();
     }
 
-    /// <summary>Trim history to fit within message count and character budget.</summary>
+    /// <summary>Trim history to fit within message count and token budget.</summary>
     private void TrimHistory()
     {
         // Trim by count
         while (History.Count > MaxHistoryMessages)
             History.RemoveAt(0);
 
-        // Trim by character budget
-        var totalChars = History.Sum(m => m.Content?.Length ?? 0);
-        while (totalChars > MaxHistoryChars && History.Count > 2)
+        // Trim by token budget
+        var totalTokens = TokenEstimator.EstimateMessages(History);
+        while (totalTokens > MaxHistoryTokens && History.Count > 2)
         {
-            totalChars -= History[0].Content?.Length ?? 0;
+            totalTokens -= TokenEstimator.Estimate(History[0].Content) + 4;
             History.RemoveAt(0);
         }
     }
