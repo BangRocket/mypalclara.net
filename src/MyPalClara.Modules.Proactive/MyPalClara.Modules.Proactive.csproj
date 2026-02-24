@@ -1,20 +1,16 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
-
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
-
   <ItemGroup>
-    <FrameworkReference Include="Microsoft.AspNetCore.App" />
-  </ItemGroup>
-
-  <ItemGroup>
+    <ProjectReference Include="..\MyPalClara.Modules.Sdk\MyPalClara.Modules.Sdk.csproj" />
     <ProjectReference Include="..\MyPalClara.Data\MyPalClara.Data.csproj" />
     <ProjectReference Include="..\MyPalClara.Llm\MyPalClara.Llm.csproj" />
-    <ProjectReference Include="..\MyPalClara.Memory\MyPalClara.Memory.csproj" />
-    <ProjectReference Include="..\MyPalClara.Modules.Sdk\MyPalClara.Modules.Sdk.csproj" />
   </ItemGroup>
-
+  <Target Name="CopyToModules" AfterTargets="Build">
+    <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
+          DestinationFolder="$(SolutionDir)modules/" />
+  </Target>
 </Project>

@@ -92,3 +92,6 @@ data/
 ## Secrets
 credentials.json
 client_secret*.json
+
+## Module build output
+modules/

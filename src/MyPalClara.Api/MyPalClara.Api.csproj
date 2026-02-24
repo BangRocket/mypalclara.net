@@ -14,6 +14,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MyPalClara.Core\MyPalClara.Core.csproj" />
     <ProjectReference Include="..\MyPalClara.Data\MyPalClara.Data.csproj" />
+    <ProjectReference Include="..\MyPalClara.Gateway\MyPalClara.Gateway.csproj" />
     <ProjectReference Include="..\MyPalClara.Memory\MyPalClara.Memory.csproj" />
     <ProjectReference Include="..\MyPalClara.Llm\MyPalClara.Llm.csproj" />
   </ItemGroup>

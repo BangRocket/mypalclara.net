@@ -3,6 +3,7 @@ using MyPalClara.Api.Services;
 using MyPalClara.Core;
 using MyPalClara.Core.Server;
 using MyPalClara.Data;
+using MyPalClara.Gateway;
 using MyPalClara.Llm;
 using MyPalClara.Memory;
 using Microsoft.EntityFrameworkCore;
@@ -37,6 +38,9 @@ try
 
     // Register Gateway (WebSocket server, router, processor)
     builder.Services.AddMyPalClara();
+
+    // Register Gateway runtime (event bus, hooks, scheduler, modules)
+    builder.Services.AddMyPalClaraGateway(builder.Configuration);
 
     // CORS
     var corsOrigins = Environment.GetEnvironmentVariable("GATEWAY_API_CORS_ORIGINS")
@@ -77,6 +81,9 @@ try
     // Wire gateway event handlers (GatewayServer <-> MessageRouter <-> MessageProcessor)
     app.Services.WireGatewayEvents();
 
+    // Start modules, load hooks, start scheduler
+    await app.Services.StartGatewayAsync();
+
     app.UseSerilogRequestLogging();
     app.UseCors();
     app.UseWebSockets();
@@ -88,6 +95,13 @@ try
     app.UseMiddleware<GatewayAuthMiddleware>();
 
     app.MapControllers();
+
+    // Register graceful shutdown
+    var lifetime = app.Services.GetRequiredService<IHostApplicationLifetime>();
+    lifetime.ApplicationStopping.Register(() =>
+    {
+        app.Services.StopGatewayAsync().GetAwaiter().GetResult();
+    });
 
     Log.Information("Clara Gateway API starting on port {Port}, WebSocket on port {WsPort}", apiPort, wsPort);
     app.Run();

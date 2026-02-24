@@ -3,13 +3,22 @@
     <Project Path="src/MyPalClara.Api/MyPalClara.Api.csproj" />
     <Project Path="src/MyPalClara.Core/MyPalClara.Core.csproj" />
     <Project Path="src/MyPalClara.Data/MyPalClara.Data.csproj" />
+    <Project Path="src/MyPalClara.Gateway/MyPalClara.Gateway.csproj" />
     <Project Path="src/MyPalClara.Llm/MyPalClara.Llm.csproj" />
     <Project Path="src/MyPalClara.Memory/MyPalClara.Memory.csproj" />
+    <Project Path="src/MyPalClara.Modules.Sdk/MyPalClara.Modules.Sdk.csproj" />
+    <Project Path="src/MyPalClara.Modules.Mcp/MyPalClara.Modules.Mcp.csproj" />
+    <Project Path="src/MyPalClara.Modules.Sandbox/MyPalClara.Modules.Sandbox.csproj" />
+    <Project Path="src/MyPalClara.Modules.Proactive/MyPalClara.Modules.Proactive.csproj" />
+    <Project Path="src/MyPalClara.Modules.Email/MyPalClara.Modules.Email.csproj" />
+    <Project Path="src/MyPalClara.Modules.Graph/MyPalClara.Modules.Graph.csproj" />
+    <Project Path="src/MyPalClara.Modules.Games/MyPalClara.Modules.Games.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/MyPalClara.Api.Tests/MyPalClara.Api.Tests.csproj" />
     <Project Path="tests/MyPalClara.Core.Tests/MyPalClara.Core.Tests.csproj" />
     <Project Path="tests/MyPalClara.Data.Tests/MyPalClara.Data.Tests.csproj" />
+    <Project Path="tests/MyPalClara.Gateway.Tests/MyPalClara.Gateway.Tests.csproj" />
     <Project Path="tests/MyPalClara.Memory.Tests/MyPalClara.Memory.Tests.csproj" />
   </Folder>
 </Solution>

@@ -4,6 +4,7 @@ using MyPalClara.Core.Protocol;
 using MyPalClara.Core.Router;
 using MyPalClara.Core.Server;
 using MyPalClara.Core.Processing;
+using MyPalClara.Modules.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -19,10 +20,18 @@ public static class GatewayWiring
         var router = services.GetRequiredService<MessageRouter>();
         var processor = services.GetRequiredService<MessageProcessor>();
         var logger = services.GetRequiredService<ILogger<GatewayServer>>();
+        var eventBus = services.GetService<IEventBus>();
 
         // GatewayServer.OnMessageReceived -> Router.SubmitAsync
         server.OnMessageReceived += async (msg, ws, platform) =>
         {
+            // Publish message:received on event bus
+            if (eventBus != null)
+            {
+                _ = eventBus.PublishAsync(GatewayEvent.Create(EventTypes.MessageReceived,
+                    userId: msg.User.Id, channelId: msg.Channel.Id, platform: platform,
+                    requestId: msg.Id));
+            }
             var request = new QueuedRequest
             {
                 RequestId = msg.Id,
