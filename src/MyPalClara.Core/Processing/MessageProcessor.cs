@@ -5,6 +5,7 @@ using MyPalClara.Llm;
 using MyPalClara.Memory;
 using MyPalClara.Memory.FactExtraction;
 using MyPalClara.Memory.VectorStore;
+using MyPalClara.Modules.Sdk;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 
@@ -21,7 +22,7 @@ public class MessageProcessor : IMessageProcessor
     /// </summary>
     public delegate Task SendMessageDelegate(WebSocket ws, object message, CancellationToken ct);
 
-    private readonly ILlmProvider _llm;
+    private readonly LlmOrchestrator _orchestrator;
     private readonly IRookMemory _rook;
     private readonly IServiceScopeFactory _scopeFactory;
     private readonly SendMessageDelegate _send;
@@ -31,7 +32,7 @@ public class MessageProcessor : IMessageProcessor
     private readonly ILogger<MessageProcessor> _logger;
 
     public MessageProcessor(
-        ILlmProvider llm,
+        LlmOrchestrator orchestrator,
         IRookMemory rook,
         IServiceScopeFactory scopeFactory,
         SendMessageDelegate send,
@@ -40,7 +41,7 @@ public class MessageProcessor : IMessageProcessor
         SmartIngestion smartIngestion,
         ILogger<MessageProcessor> logger)
     {
-        _llm = llm;
+        _orchestrator = orchestrator;
         _rook = rook;
         _scopeFactory = scopeFactory;
         _send = send;
@@ -158,19 +159,59 @@ public class MessageProcessor : IMessageProcessor
                 sessionSummary,
                 guildName: null);
 
-            // 7. Stream LLM response
+            // 7. Run LLM orchestrator (tool-calling loop + simulated streaming)
+            var toolContext = new ToolCallContext(
+                context.UserId, context.ChannelId, context.Platform, requestId);
+
             var accumulated = new StringBuilder();
-            await foreach (var chunk in _llm.StreamAsync(llmMessages, ct))
+            var toolCount = 0;
+
+            await foreach (var evt in _orchestrator.GenerateAsync(
+                llmMessages, toolContext, context.ModelTier ?? "mid", ct))
             {
-                accumulated.Append(chunk);
-                await _send(ws, new
+                switch (evt)
                 {
-                    type = "response_chunk",
-                    response_id = responseId,
-                    request_id = requestId,
-                    chunk,
-                    full_text = accumulated.ToString()
-                }, ct);
+                    case OrchestratorEvent.TextChunk textChunk:
+                        accumulated.Append(textChunk.Text);
+                        await _send(ws, new
+                        {
+                            type = "response_chunk",
+                            response_id = responseId,
+                            request_id = requestId,
+                            chunk = textChunk.Text,
+                            full_text = accumulated.ToString()
+                        }, ct);
+                        break;
+
+                    case OrchestratorEvent.ToolStart toolStart:
+                        await _send(ws, new
+                        {
+                            type = "tool_start",
+                            response_id = responseId,
+                            request_id = requestId,
+                            tool_name = toolStart.Name,
+                            step = toolStart.Step
+                        }, ct);
+                        break;
+
+                    case OrchestratorEvent.ToolEnd toolEnd:
+                        await _send(ws, new
+                        {
+                            type = "tool_result",
+                            response_id = responseId,
+                            request_id = requestId,
+                            tool_name = toolEnd.Name,
+                            success = toolEnd.Success,
+                            preview = toolEnd.Preview
+                        }, ct);
+                        break;
+
+                    case OrchestratorEvent.Complete complete:
+                        toolCount = complete.ToolCount;
+                        if (accumulated.Length == 0)
+                            accumulated.Append(complete.FullText);
+                        break;
+                }
             }
 
             var fullText = accumulated.ToString();
@@ -193,12 +234,12 @@ public class MessageProcessor : IMessageProcessor
                 response_id = responseId,
                 request_id = requestId,
                 full_text = fullText,
-                tool_count = 0
+                tool_count = toolCount
             }, ct);
 
             _logger.LogInformation(
-                "Completed request {RequestId}: {Length} chars",
-                requestId, fullText.Length);
+                "Completed request {RequestId}: {Length} chars, {ToolCount} tools",
+                requestId, fullText.Length, toolCount);
 
             // 10. Background: extract memories (fire-and-forget)
             _ = Task.Run(async () =>

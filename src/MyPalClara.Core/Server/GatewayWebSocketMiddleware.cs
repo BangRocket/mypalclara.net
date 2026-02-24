@@ -63,11 +63,12 @@ public static class GatewayWebSocketExtensions
         services.AddSingleton<GatewayServer>();
         services.AddSingleton<MessageRouter>();
         services.AddSingleton<SessionManager>();
+        services.AddSingleton<LlmOrchestrator>();
         services.AddSingleton<MessageProcessor>(sp =>
         {
             var server = sp.GetRequiredService<GatewayServer>();
             return new MessageProcessor(
-                sp.GetRequiredService<ILlmProvider>(),
+                sp.GetRequiredService<LlmOrchestrator>(),
                 sp.GetRequiredService<IRookMemory>(),
                 sp.GetRequiredService<IServiceScopeFactory>(),
                 server.SendAsync,  // matches SendMessageDelegate signature

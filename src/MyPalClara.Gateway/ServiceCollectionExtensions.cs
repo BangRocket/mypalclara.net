@@ -5,6 +5,7 @@ using MyPalClara.Gateway.Events;
 using MyPalClara.Gateway.Hooks;
 using MyPalClara.Gateway.Modules;
 using MyPalClara.Gateway.Scheduling;
+using MyPalClara.Gateway.Tools;
 using MyPalClara.Modules.Sdk;
 
 namespace MyPalClara.Gateway;
@@ -17,6 +18,10 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddMyPalClaraGateway(this IServiceCollection services, IConfiguration config)
     {
+        // Tool registry
+        services.AddSingleton<ToolRegistry>();
+        services.AddSingleton<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistry>());
+
         // Core event infrastructure
         services.AddSingleton<EventBus>();
         services.AddSingleton<IEventBus>(sp => sp.GetRequiredService<EventBus>());
