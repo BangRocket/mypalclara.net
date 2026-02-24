@@ -21,5 +21,6 @@
     <Project Path="tests/MyPalClara.Gateway.Tests/MyPalClara.Gateway.Tests.csproj" />
     <Project Path="tests/MyPalClara.Memory.Tests/MyPalClara.Memory.Tests.csproj" />
     <Project Path="tests/MyPalClara.Modules.Mcp.Tests/MyPalClara.Modules.Mcp.Tests.csproj" />
+    <Project Path="tests/MyPalClara.Modules.Sandbox.Tests/MyPalClara.Modules.Sandbox.Tests.csproj" />
   </Folder>
 </Solution>
