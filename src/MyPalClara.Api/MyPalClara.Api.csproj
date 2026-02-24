@@ -17,6 +17,7 @@
     <ProjectReference Include="..\MyPalClara.Gateway\MyPalClara.Gateway.csproj" />
     <ProjectReference Include="..\MyPalClara.Memory\MyPalClara.Memory.csproj" />
     <ProjectReference Include="..\MyPalClara.Llm\MyPalClara.Llm.csproj" />
+    <ProjectReference Include="..\MyPalClara.Modules.Graph\MyPalClara.Modules.Graph.csproj" />
   </ItemGroup>
 
 </Project>

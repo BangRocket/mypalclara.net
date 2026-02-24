@@ -5,6 +5,9 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="StackExchange.Redis" Version="2.*" />
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\MyPalClara.Modules.Sdk\MyPalClara.Modules.Sdk.csproj" />
     <ProjectReference Include="..\MyPalClara.Memory\MyPalClara.Memory.csproj" />
     <ProjectReference Include="..\MyPalClara.Llm\MyPalClara.Llm.csproj" />
