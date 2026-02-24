@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MyPalClara.Api/MyPalClara.Api.csproj" />
+    <Project Path="src/MyPalClara.Core/MyPalClara.Core.csproj" />
+    <Project Path="src/MyPalClara.Data/MyPalClara.Data.csproj" />
+    <Project Path="src/MyPalClara.Llm/MyPalClara.Llm.csproj" />
+    <Project Path="src/MyPalClara.Memory/MyPalClara.Memory.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MyPalClara.Api.Tests/MyPalClara.Api.Tests.csproj" />
+    <Project Path="tests/MyPalClara.Core.Tests/MyPalClara.Core.Tests.csproj" />
+    <Project Path="tests/MyPalClara.Data.Tests/MyPalClara.Data.Tests.csproj" />
+    <Project Path="tests/MyPalClara.Memory.Tests/MyPalClara.Memory.Tests.csproj" />
+  </Folder>
+</Solution>
