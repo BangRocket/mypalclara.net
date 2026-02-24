@@ -18,9 +18,10 @@ public static class ServiceCollectionExtensions
     /// </summary>
     public static IServiceCollection AddMyPalClaraGateway(this IServiceCollection services, IConfiguration config)
     {
-        // Tool registry
+        // Tool registry and process manager
         services.AddSingleton<ToolRegistry>();
         services.AddSingleton<IToolRegistry>(sp => sp.GetRequiredService<ToolRegistry>());
+        services.AddSingleton<ProcessManagerService>();
 
         // Core event infrastructure
         services.AddSingleton<EventBus>();
@@ -70,11 +71,17 @@ public static class ServiceCollectionExtensions
         scheduler.LoadFromFile(schedulerFile);
         logger.LogInformation("Scheduler tasks loaded from {Path}", schedulerFile);
 
+        // Register core tools
+        var toolRegistry = services.GetRequiredService<ToolRegistry>();
+        var scopeFactory = services.GetRequiredService<IServiceScopeFactory>();
+        var bridge = services.GetRequiredService<IGatewayBridge>();
+        CoreToolsRegistrar.RegisterAll(toolRegistry, scopeFactory, bridge);
+        logger.LogInformation("Registered {Count} core tools", toolRegistry.GetAllTools().Count);
+
         // Discover and start modules
         var loader = services.GetRequiredService<ModuleLoader>();
         var registry = services.GetRequiredService<ModuleRegistry>();
         var eventBus = services.GetRequiredService<IEventBus>();
-        var bridge = services.GetRequiredService<IGatewayBridge>();
 
         var modulesDir = Environment.GetEnvironmentVariable("CLARA_MODULES_DIR")
             ?? config.GetValue<string>("Modules:Directory")
