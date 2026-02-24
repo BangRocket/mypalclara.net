@@ -161,7 +161,7 @@ public class LlmOrchestratorTests
             _handler = handler;
         }
 
-        public void RegisterTool(string name, ToolSchema schema, Func<ToolCallContext, Task<ToolResult>> handler) { }
+        public void RegisterTool(string name, ToolSchema schema, Func<Dictionary<string, JsonElement>, ToolCallContext, CancellationToken, Task<ToolResult>> handler) { }
         public void RegisterSource(IToolSource source) { }
         public void UnregisterTool(string name) { }
 

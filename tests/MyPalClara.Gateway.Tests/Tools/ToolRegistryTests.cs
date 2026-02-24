@@ -18,7 +18,7 @@ public class ToolRegistryTests
     public void RegisterTool_And_GetAllTools_ReturnsIt()
     {
         _registry.RegisterTool("test_tool", MakeSchema("test_tool"),
-            ctx => Task.FromResult(new ToolResult(true, "ok")));
+            (args, ctx, ct) => Task.FromResult(new ToolResult(true, "ok")));
 
         var tools = _registry.GetAllTools();
         Assert.Single(tools);
@@ -29,18 +29,18 @@ public class ToolRegistryTests
     public void RegisterTool_DuplicateName_Throws()
     {
         _registry.RegisterTool("dupe", MakeSchema("dupe"),
-            ctx => Task.FromResult(new ToolResult(true, "ok")));
+            (args, ctx, ct) => Task.FromResult(new ToolResult(true, "ok")));
 
         Assert.Throws<InvalidOperationException>(() =>
             _registry.RegisterTool("dupe", MakeSchema("dupe"),
-                ctx => Task.FromResult(new ToolResult(true, "ok"))));
+                (args, ctx, ct) => Task.FromResult(new ToolResult(true, "ok"))));
     }
 
     [Fact]
     public void UnregisterTool_RemovesIt()
     {
         _registry.RegisterTool("removeme", MakeSchema("removeme"),
-            ctx => Task.FromResult(new ToolResult(true, "ok")));
+            (args, ctx, ct) => Task.FromResult(new ToolResult(true, "ok")));
 
         _registry.UnregisterTool("removeme");
 
@@ -51,7 +51,7 @@ public class ToolRegistryTests
     public async Task ExecuteAsync_CallsHandler()
     {
         _registry.RegisterTool("echo", MakeSchema("echo"),
-            ctx => Task.FromResult(new ToolResult(true, $"hello {ctx.UserId}")));
+            (args, ctx, ct) => Task.FromResult(new ToolResult(true, $"hello {ctx.UserId}")));
 
         var result = await _registry.ExecuteAsync("echo", new(), _ctx);
 
@@ -97,7 +97,7 @@ public class ToolRegistryTests
         _registry.RegisterSource(source);
 
         _registry.RegisterTool("overlap", MakeSchema("overlap"),
-            ctx => Task.FromResult(new ToolResult(true, "direct wins")));
+            (args, ctx, ct) => Task.FromResult(new ToolResult(true, "direct wins")));
 
         var result = await _registry.ExecuteAsync("overlap", new(), _ctx);
 
@@ -109,7 +109,7 @@ public class ToolRegistryTests
     public async Task ExecuteAsync_HandlerException_ReturnsError()
     {
         _registry.RegisterTool("boom", MakeSchema("boom"),
-            ctx => { throw new InvalidOperationException("kaboom"); });
+            (args, ctx, ct) => { throw new InvalidOperationException("kaboom"); });
 
         var result = await _registry.ExecuteAsync("boom", new(), _ctx);
 
@@ -121,7 +121,7 @@ public class ToolRegistryTests
     public void GetAllTools_WithFilter_NotImplementedReturnsAll()
     {
         _registry.RegisterTool("a", MakeSchema("a"),
-            ctx => Task.FromResult(new ToolResult(true, "ok")));
+            (args, ctx, ct) => Task.FromResult(new ToolResult(true, "ok")));
 
         var tools = _registry.GetAllTools(new ToolFilter("discord"));
         Assert.Single(tools);

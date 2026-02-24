@@ -8,7 +8,7 @@ namespace MyPalClara.Gateway.Tools;
 
 public class ToolRegistry : IToolRegistry
 {
-    private readonly ConcurrentDictionary<string, (ToolSchema Schema, Func<ToolCallContext, Task<ToolResult>> Handler)> _tools = new();
+    private readonly ConcurrentDictionary<string, (ToolSchema Schema, Func<Dictionary<string, JsonElement>, ToolCallContext, CancellationToken, Task<ToolResult>> Handler)> _tools = new();
     private readonly List<IToolSource> _sources = [];
     private readonly object _sourceLock = new();
     private readonly ILogger<ToolRegistry> _logger;
@@ -18,7 +18,7 @@ public class ToolRegistry : IToolRegistry
         _logger = logger;
     }
 
-    public void RegisterTool(string name, ToolSchema schema, Func<ToolCallContext, Task<ToolResult>> handler)
+    public void RegisterTool(string name, ToolSchema schema, Func<Dictionary<string, JsonElement>, ToolCallContext, CancellationToken, Task<ToolResult>> handler)
     {
         if (!_tools.TryAdd(name, (schema, handler)))
             throw new InvalidOperationException($"Tool '{name}' is already registered.");
@@ -81,7 +81,7 @@ public class ToolRegistry : IToolRegistry
         {
             try
             {
-                return await entry.Handler(context);
+                return await entry.Handler(args, context, ct);
             }
             catch (Exception ex)
             {

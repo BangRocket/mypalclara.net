@@ -77,7 +77,7 @@ public class MessageProcessorToolWiringTests
         private readonly IReadOnlyList<ToolSchema> _tools;
         public FakeRegistry(IReadOnlyList<ToolSchema> tools) => _tools = tools;
 
-        public void RegisterTool(string name, ToolSchema schema, Func<ToolCallContext, Task<ToolResult>> handler) { }
+        public void RegisterTool(string name, ToolSchema schema, Func<Dictionary<string, JsonElement>, ToolCallContext, CancellationToken, Task<ToolResult>> handler) { }
         public void RegisterSource(IToolSource source) { }
         public void UnregisterTool(string name) { }
         public IReadOnlyList<ToolSchema> GetAllTools(ToolFilter? filter = null) => _tools;

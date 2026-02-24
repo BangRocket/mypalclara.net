@@ -8,6 +8,7 @@
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
   </ItemGroup>
   <ItemGroup>
+    <PackageReference Include="AWSSDK.S3" Version="4.*" />
     <PackageReference Include="YamlDotNet" Version="16.*" />
   </ItemGroup>
   <ItemGroup>

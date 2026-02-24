@@ -5,7 +5,7 @@ namespace MyPalClara.Modules.Sdk;
 
 public interface IToolRegistry
 {
-    void RegisterTool(string name, ToolSchema schema, Func<ToolCallContext, Task<ToolResult>> handler);
+    void RegisterTool(string name, ToolSchema schema, Func<Dictionary<string, JsonElement>, ToolCallContext, CancellationToken, Task<ToolResult>> handler);
     void RegisterSource(IToolSource source);
     void UnregisterTool(string name);
     IReadOnlyList<ToolSchema> GetAllTools(ToolFilter? filter = null);
