@@ -16,6 +16,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\MyPalClara.Core\MyPalClara.Core.csproj" />
+    <ProjectReference Include="..\..\src\MyPalClara.Modules.Email\MyPalClara.Modules.Email.csproj" />
+    <ProjectReference Include="..\..\src\MyPalClara.Modules.Proactive\MyPalClara.Modules.Proactive.csproj" />
   </ItemGroup>
 
   <ItemGroup>
