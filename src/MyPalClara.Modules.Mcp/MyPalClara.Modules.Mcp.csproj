@@ -7,6 +7,7 @@
   <ItemGroup>
     <ProjectReference Include="..\MyPalClara.Modules.Sdk\MyPalClara.Modules.Sdk.csproj" />
     <ProjectReference Include="..\MyPalClara.Llm\MyPalClara.Llm.csproj" />
+    <ProjectReference Include="..\MyPalClara.Data\MyPalClara.Data.csproj" />
   </ItemGroup>
   <Target Name="CopyToModules" AfterTargets="Build">
     <Copy SourceFiles="$(OutputPath)$(AssemblyName).dll"
