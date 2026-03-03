@@ -1,4 +1,5 @@
 using Clara.Core;
+using Clara.Core.Config;
 using Clara.Core.Data;
 using Clara.Core.Events;
 using Clara.Core.Llm;
@@ -62,6 +63,10 @@ builder.Services.AddHostedService<SchedulerService>();
 // Background services
 builder.Services.AddHostedService<SessionCleanupService>();
 builder.Services.AddHostedService<MemoryConsolidationService>();
+
+// Heartbeat
+builder.Services.Configure<HeartbeatOptions>(builder.Configuration.GetSection("Clara:Heartbeat"));
+builder.Services.AddHostedService<HeartbeatService>();
 
 // Sandbox
 builder.Services.AddSingleton<ISandboxProvider, DockerSandbox>();

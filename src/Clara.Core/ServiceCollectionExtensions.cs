@@ -4,6 +4,7 @@ using Clara.Core.Llm;
 using Clara.Core.Memory;
 using Clara.Core.Prompt;
 using Clara.Core.Sessions;
+using Clara.Core.SubAgents;
 using Clara.Core.Tools;
 using Clara.Core.Tools.BuiltIn;
 using Clara.Core.Tools.Mcp;
@@ -40,8 +41,8 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<IPromptSection, UserContextSection>();
         services.AddSingleton<IPromptSection, MemorySection>();
 
-        // Sessions
-        services.AddScoped<ISessionManager, SessionManager>();
+        // Sessions — singleton because SessionManager creates its own scopes internally
+        services.AddSingleton<ISessionManager, SessionManager>();
 
         // Events
         services.AddSingleton<IClaraEventBus, ClaraEventBus>();
@@ -54,6 +55,10 @@ public static class ServiceCollectionExtensions
 
         // Email service (stub — replaced by gateway module when configured)
         services.AddSingleton<IEmailService, StubEmailService>();
+
+        // Sub-agents
+        services.Configure<SubAgentOptions>(configuration.GetSection("Clara:SubAgents"));
+        services.AddSingleton<ISubAgentManager, SubAgentManager>();
 
         return services;
     }
@@ -95,5 +100,15 @@ public static class ServiceCollectionExtensions
         registry.Register(new EmailCheckTool(emailService));
         registry.Register(new EmailReadTool(emailService));
         registry.Register(new EmailSendAlertTool(emailService));
+
+        // Session tools
+        var sessionManager = services.GetRequiredService<ISessionManager>();
+        registry.Register(new SessionsListTool(sessionManager));
+        registry.Register(new SessionsHistoryTool(sessionManager));
+        registry.Register(new SessionsSendTool(sessionManager));
+
+        // Sub-agent tools
+        var subAgentManager = services.GetRequiredService<ISubAgentManager>();
+        registry.Register(new SessionsSpawnTool(subAgentManager));
     }
 }

@@ -44,3 +44,13 @@ public static class SchedulerEvents
     public const string TaskRun = "scheduler:task_run";
     public const string TaskError = "scheduler:task_error";
 }
+
+public static class SubAgentEvents
+{
+    public const string Completed = "subagent:completed";
+}
+
+public static class HeartbeatEvents
+{
+    public const string Action = "heartbeat:action";
+}
