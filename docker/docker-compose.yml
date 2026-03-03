@@ -9,6 +9,8 @@ services:
     environment:
       - ConnectionStrings__Clara=Host=postgres;Database=clara;Username=clara;Password=clara
       - Clara__Gateway__Host=0.0.0.0
+    volumes:
+      - ./workspace:/app/workspace
     depends_on:
       postgres:
         condition: service_healthy
@@ -36,6 +38,15 @@ services:
     volumes:
       - redisdata:/data
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
 volumes:
   pgdata:
   redisdata:
+  qdrantdata:

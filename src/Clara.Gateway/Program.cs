@@ -14,6 +14,7 @@ using Clara.Gateway.Queues;
 using Clara.Gateway.Sandbox;
 using Clara.Gateway.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Serilog;
 using System.Text.Json;
 
@@ -99,6 +100,10 @@ builder.Services.AddControllers()
         opts.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower;
     });
 
+// Health checks
+builder.Services.AddHealthChecks()
+    .AddDbContextCheck<ClaraDbContext>();
+
 // CORS
 builder.Services.AddCors(options =>
 {
@@ -141,6 +146,7 @@ app.UseCors();
 app.MapControllers();
 app.MapHub<AdapterHub>("/hubs/adapter");
 app.MapHub<MonitorHub>("/hubs/monitor");
+app.MapHealthChecks("/health");
 
 // Publish startup event
 var eventBus = app.Services.GetRequiredService<IClaraEventBus>();

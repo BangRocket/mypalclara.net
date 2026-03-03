@@ -5,22 +5,20 @@ FROM mcr.microsoft.com/dotnet/nightly/sdk:10.0 AS build
 WORKDIR /src
 
 # Copy solution and project files for restore (layer caching)
-COPY MyPalClara.slnx .
-COPY src/MyPalClara.Api/MyPalClara.Api.csproj src/MyPalClara.Api/
-COPY src/MyPalClara.Core/MyPalClara.Core.csproj src/MyPalClara.Core/
-COPY src/MyPalClara.Data/MyPalClara.Data.csproj src/MyPalClara.Data/
-COPY src/MyPalClara.Llm/MyPalClara.Llm.csproj src/MyPalClara.Llm/
-COPY src/MyPalClara.Memory/MyPalClara.Memory.csproj src/MyPalClara.Memory/
-COPY tests/MyPalClara.Api.Tests/MyPalClara.Api.Tests.csproj tests/MyPalClara.Api.Tests/
-COPY tests/MyPalClara.Core.Tests/MyPalClara.Core.Tests.csproj tests/MyPalClara.Core.Tests/
-COPY tests/MyPalClara.Data.Tests/MyPalClara.Data.Tests.csproj tests/MyPalClara.Data.Tests/
-COPY tests/MyPalClara.Memory.Tests/MyPalClara.Memory.Tests.csproj tests/MyPalClara.Memory.Tests/
+COPY Clara.slnx .
+COPY src/Clara.Core/Clara.Core.csproj src/Clara.Core/
+COPY src/Clara.Gateway/Clara.Gateway.csproj src/Clara.Gateway/
+COPY src/Clara.Adapters.Discord/Clara.Adapters.Discord.csproj src/Clara.Adapters.Discord/
+COPY src/Clara.Adapters.Teams/Clara.Adapters.Teams.csproj src/Clara.Adapters.Teams/
+COPY src/Clara.Adapters.Cli/Clara.Adapters.Cli.csproj src/Clara.Adapters.Cli/
+COPY tests/Clara.Core.Tests/Clara.Core.Tests.csproj tests/Clara.Core.Tests/
+COPY tests/Clara.Gateway.Tests/Clara.Gateway.Tests.csproj tests/Clara.Gateway.Tests/
 
-RUN dotnet restore MyPalClara.slnx
+RUN dotnet restore Clara.slnx
 
 # Copy all source and build
 COPY . .
-RUN dotnet publish src/MyPalClara.Api/MyPalClara.Api.csproj \
+RUN dotnet publish src/Clara.Gateway/Clara.Gateway.csproj \
     -c Release \
     -o /app/publish \
     --no-restore
@@ -30,13 +28,11 @@ FROM mcr.microsoft.com/dotnet/nightly/aspnet:10.0 AS runtime
 WORKDIR /app
 
 COPY --from=build /app/publish .
+COPY workspace/ /app/workspace/
 
-# API port and WebSocket port
+# Gateway port
 EXPOSE 18789
-EXPOSE 18790
 
 ENV ASPNETCORE_ENVIRONMENT=Production
-ENV CLARA_GATEWAY_PORT=18789
-ENV CLARA_GATEWAY_API_PORT=18790
 
-ENTRYPOINT ["dotnet", "MyPalClara.Api.dll"]
+ENTRYPOINT ["dotnet", "Clara.Gateway.dll"]

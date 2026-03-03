@@ -1,6 +1,8 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/Clara.Adapters.Cli/Clara.Adapters.Cli.csproj" />
     <Project Path="src/Clara.Adapters.Discord/Clara.Adapters.Discord.csproj" />
+    <Project Path="src/Clara.Adapters.Teams/Clara.Adapters.Teams.csproj" />
     <Project Path="src/Clara.Core/Clara.Core.csproj" />
     <Project Path="src/Clara.Gateway/Clara.Gateway.csproj" />
   </Folder>
