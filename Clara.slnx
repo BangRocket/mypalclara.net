@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Clara.Core/Clara.Core.csproj" />
+    <Project Path="src/Clara.Gateway/Clara.Gateway.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Clara.Core.Tests/Clara.Core.Tests.csproj" />
+    <Project Path="tests/Clara.Gateway.Tests/Clara.Gateway.Tests.csproj" />
+  </Folder>
+</Solution>

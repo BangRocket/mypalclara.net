@@ -4,7 +4,9 @@ Guidance for Claude Code working with this repository.
 
 ## Project Overview
 
-MyPalClara is a .NET 10 reimplementation of the MyPalClara Python gateway. It provides a WebSocket server for platform adapters and an HTTP API for the web UI, with LLM orchestration and Rook memory system integration.
+Clara is a .NET 10 AI agent gateway. It provides an ASP.NET Core host with HTTP API and WebSocket support, LLM orchestration with tool calling, and persistent memory.
+
+This is a ground-up rewrite (Phase 0 complete). The previous MyPalClara.* project structure has been replaced.
 
 ## Quick Reference
 
@@ -13,174 +15,121 @@ MyPalClara is a .NET 10 reimplementation of the MyPalClara Python gateway. It pr
 dotnet build
 
 # Run (development)
-dotnet run --project src/MyPalClara.Api
+dotnet run --project src/Clara.Gateway
 
 # Run tests
 dotnet test
 
 # Docker
-docker-compose up
+docker compose -f docker/docker-compose.yml up
 ```
 
 ## Architecture
 
 ```
-MyPalClara.Api        -> ASP.NET Core host (HTTP API + WebSocket)
-MyPalClara.Core       -> WebSocket server, message router, processing pipeline
-MyPalClara.Data       -> EF Core entities + DbContext (schema-only, no migrations)
-MyPalClara.Memory     -> Rook memory system (Qdrant, embeddings, FSRS, fact extraction)
-MyPalClara.Llm        -> LLM provider abstraction (Anthropic, OpenAI-compatible)
+Clara.Core      -> Domain: entities, DbContext, config, LLM/memory/tool interfaces
+Clara.Gateway   -> ASP.NET Core host: HTTP API, WebSocket, pipeline, services
+```
+
+### Project Structure
+
+```
+src/
+  Clara.Core/
+    Config/          # Strongly-typed options (ClaraOptions, LlmOptions, etc.)
+    Data/
+      Entities/      # EF Core entities (8 files)
+      ClaraDbContext  # Fluent API mapping, provider-aware (PostgreSQL/SQLite)
+    Events/          # Event bus (future)
+    Llm/
+      Providers/     # LLM provider implementations (future)
+      ToolCalling/   # Tool call handling (future)
+    Memory/          # Memory system (future)
+    Prompt/          # Prompt building (future)
+    Sessions/        # Session management (future)
+    SubAgents/       # Sub-agent orchestration (future)
+    Tools/
+      BuiltIn/       # Built-in tools (future)
+      Mcp/           # MCP tool integration (future)
+      ToolPolicy/    # Tool policy enforcement (future)
+
+  Clara.Gateway/
+    Api/             # HTTP API controllers (future)
+    Hooks/           # Shell/C# hooks (future)
+    Hubs/            # SignalR hubs (future)
+    Pipeline/
+      Stages/        # Processing pipeline stages (future)
+      Middleware/    # Pipeline middleware (future)
+    Queues/          # Message queues (future)
+    Sandbox/         # Docker sandbox (future)
+    Services/        # Background services (future)
+
+tests/
+  Clara.Core.Tests/
+  Clara.Gateway.Tests/
+
+docker/
+  Dockerfile         # Multi-stage build
+  docker-compose.yml # Gateway + PostgreSQL (pgvector) + Redis
+
+workspace/
+  persona.md         # Clara's persona definition
+  tools.md           # Tool usage conventions
+  heartbeat.md       # Periodic checklist
 ```
 
 ### Key Design Decisions
 
-- **Schema owned by Python Alembic** -- EF Core uses Fluent API mapping only, NO migrations
-- **Session.Archived is string** ("true"/"false"), not bool -- matches Python schema
-- **Two ports**: API (18790) + WebSocket (18789) on same Kestrel host
-- **Singleton services**: GatewayServer, MessageRouter, MessageProcessor connected via events
-- **IServiceScopeFactory pattern**: MessageProcessor creates scoped DbContext per request
-- **FSRS-6**: Memory scoring uses power-law forgetting curve with 21 weights
-- **Smart ingestion**: Similarity thresholds (0.95 skip, 0.75 update, 0.60 supersede)
-- **Rook LLM**: Separate provider config (ROOK_PROVIDER/ROOK_MODEL) from chat LLM
+- **Provider-aware DbContext** -- `OnModelCreating` detects PostgreSQL vs SQLite; jsonb and vector column types only applied for PostgreSQL; Embedding ignored for SQLite
+- **No EF Core migrations** -- schema mapping only via Fluent API
+- **Strongly-typed config** -- `ClaraOptions` root with nested options for each subsystem, bound to "Clara" config section
 
-### Data Flow
+### Entities
 
-```
-Adapter (Discord etc.) -> WebSocket -> GatewayServer
-  -> OnMessageReceived event -> GatewayWiring handler
-  -> MessageRouter.SubmitAsync (debounce + dedup)
-  -> MessageProcessor.ProcessAsync (LLM streaming)
-  -> GatewayServer.SendAsync (response chunks back to adapter)
-  -> Background: fact extraction + smart ingestion
-```
+8 entities in `Clara.Core.Data.Entities/`:
+- `UserEntity` -- platform users
+- `SessionEntity` -- conversation sessions (has many Messages)
+- `MessageEntity` -- individual messages in a session
+- `MemoryEntity` -- vector memories with pgvector Embedding
+- `ProjectEntity` -- project metadata
+- `McpServerEntity` -- MCP server configurations
+- `EmailAccountEntity` -- email polling accounts
+- `ToolUsageEntity` -- tool call audit log
 
-### Wire Compatibility
+### Configuration
 
-All responses must match the Python gateway exactly:
-- HTTP API: same routes, same JSON shapes, snake_case naming
-- WebSocket: same 28 message types, same field names
-- Database: same tables/columns (SQLite dev, PostgreSQL prod)
-- Qdrant: same collection (clara_memories), same payload fields
-
-## Environment Variables
-
-### Required
-- `OPENAI_API_KEY` -- Always required (embeddings)
-- `LLM_PROVIDER` -- anthropic, openrouter, nanogpt, openai, azure
-- Provider-specific API key (e.g., `ANTHROPIC_API_KEY`)
-
-### Gateway
-- `CLARA_GATEWAY_HOST` -- Default: 127.0.0.1
-- `CLARA_GATEWAY_PORT` -- WebSocket port, default: 18789
-- `CLARA_GATEWAY_API_PORT` -- HTTP API port, default: 18790
-- `CLARA_GATEWAY_SECRET` -- Optional auth secret
-- `GATEWAY_API_CORS_ORIGINS` -- Comma-separated origins
-
-### Database
-- `DATABASE_URL` -- PostgreSQL URL (default: SQLite at data/clara.db)
-
-### Qdrant
-- `QDRANT_HOST` -- Default: localhost
-- `QDRANT_PORT` -- Default: 6333
-- `ROOK_COLLECTION_NAME` -- Default: clara_memories
-
-### LLM Tiers
-- `MODEL_TIER` -- Default tier: high, mid, low
-- `ANTHROPIC_MODEL_HIGH`, `_MID`, `_LOW` -- Tier-specific models
-- Same pattern for OPENROUTER_MODEL_*, NANOGPT_MODEL_*, etc.
-
-### Rook (Memory Extraction)
-- `ROOK_PROVIDER` -- Default: openrouter
-- `ROOK_MODEL` -- Default: openai/gpt-4o-mini
-
-## Key Patterns
-
-- All entities in `MyPalClara.Data.Entities/` -- 32 files
-- Controllers in `MyPalClara.Api.Controllers/` -- 6 controllers
-- Protocol records in `MyPalClara.Core.Protocol.Messages` -- wire-compatible
-- Event wiring in `MyPalClara.Core.GatewayWiring` -- connects singletons
-- DI registration: `AddClaraLlm()`, `AddClaraMemory()`, `AddMyPalClara()`
+Root: `ClaraOptions` (section: "Clara")
+- `LlmOptions` -- provider selection, API keys, model tiers
+- `MemoryOptions` -- embedding model, search limits, extraction
+- `GatewayOptions` -- host, port, secret, tool limits
+- `ToolOptions` -- loop detection, policies per channel
+- `SandboxOptions` -- Docker container settings
+- `HeartbeatOptions` -- periodic checklist
+- `SubAgentOptions` -- sub-agent limits
+- `DiscordOptions` -- bot token, servers, stop phrases
 
 ## Testing
 
 ```bash
-dotnet test                                    # All tests
-dotnet test tests/MyPalClara.Data.Tests      # Specific project
+dotnet test                                  # All tests
+dotnet test tests/Clara.Core.Tests          # Core tests only
+dotnet test tests/Clara.Gateway.Tests       # Gateway tests only
 ```
 
-## Event Bus
+Tests use SQLite in-memory databases. The DbContext is provider-aware so Embedding columns are ignored under SQLite.
 
-Foundation for hooks, scheduler, and module communication.
+## NuGet Packages
 
-- **Interface**: `IEventBus` in `MyPalClara.Modules.Sdk`
-- **Implementation**: `EventBus` in `MyPalClara.Gateway`
-- **Payload**: `GatewayEvent` record -- Type, Timestamp, NodeId, Platform, UserId, ChannelId, RequestId, Data dict
-- **Execution**: All handlers run concurrently via `Task.WhenAll`, errors isolated per handler
-- **Priority**: Higher priority runs first
-- **Diagnostics**: Last 100 events kept in memory
+### Clara.Core
+- Microsoft.EntityFrameworkCore (10.x)
+- Npgsql.EntityFrameworkCore.PostgreSQL (10.x preview)
+- Microsoft.EntityFrameworkCore.Sqlite (10.x)
+- Pgvector.EntityFrameworkCore (0.3.0)
+- Microsoft.Extensions.Http, DI, Logging, Options (10.x)
+- Anthropic (0.x)
+- OpenAI (2.x)
+- YamlDotNet (16.x)
 
-### Event Types
-
-| Category | Events |
-|----------|--------|
-| Lifecycle | `gateway:startup`, `gateway:shutdown` |
-| Adapters | `adapter:connected`, `adapter:disconnected` |
-| Sessions | `session:start`, `session:end`, `session:timeout` |
-| Messages | `message:received`, `message:sent`, `message:cancelled` |
-| Tools | `tool:start`, `tool:end`, `tool:error` |
-| Scheduler | `scheduler:task_run`, `scheduler:task_error` |
-| Memory | `memory:read`, `memory:write` |
-| Custom | any string |
-
-## Hooks System
-
-Shell and C# hooks triggered by event bus events.
-
-- **HookManager** in `MyPalClara.Gateway` -- loads YAML, registers shell hooks as event subscribers
-- **ShellHookExecutor** -- spawns `Process` per hook invocation with timeout enforcement
-- **YAML location**: `Hooks:Directory` from config (default: `./hooks/hooks.yaml`)
-- Shell hooks receive event data as `CLARA_*` environment variables (`CLARA_EVENT_TYPE`, `CLARA_USER_ID`, `CLARA_EVENT_DATA`, etc.)
-- C# modules register hooks directly via `IEventBus.Subscribe()` in `ConfigureEvents`
-
-## Scheduler
-
-Background `IHostedService` running interval, cron, and one-shot tasks.
-
-- **Scheduler** in `MyPalClara.Gateway` -- 100ms tick loop
-- **CronParser** -- built-in 5-field cron (`*`, `*/N`, `N-M`, `N,M`)
-- **Task types**: `Interval` (every N seconds), `Cron` (5-field expression), `OneShot` (delay or specific time)
-- **YAML location**: `Scheduler:Directory` from config (default: `./scheduler.yaml`)
-- C# modules register tasks via `IScheduler.AddTask()`
-- Emits `scheduler:task_run` and `scheduler:task_error` events
-
-## Module System
-
-Pluggable services discovered at startup from the `modules/` directory.
-
-- **Contract**: `IGatewayModule` in `MyPalClara.Modules.Sdk` -- Name, ConfigureServices, StartAsync/StopAsync, GetHealth, ConfigureEvents
-- **Bridge**: `IGatewayBridge` -- modules send/receive WebSocket messages and query connected nodes
-- **Discovery**: `ModuleLoader` scans `Modules:Directory` for DLLs, finds `IGatewayModule` implementations
-- **Enable/disable**: `appsettings.json` `"Modules"` section -- key per module name (true/false)
-- **Crash isolation**: Each module's `StartAsync` wrapped in try/catch; failed modules marked in `ModuleHealth`, gateway continues
-- **Health**: `ModuleHealth` record -- Status (running/stopped/failed/disabled), LastError, LastActivity, Metrics
-
-### Project Structure (New)
-
-```
-src/
-  MyPalClara.Modules.Sdk/      # Contract: IGatewayModule, IEventBus, IGatewayBridge, event types
-  MyPalClara.Gateway/           # Runtime: EventBus, HookManager, Scheduler, ModuleLoader, CronParser
-  MyPalClara.Modules.Mcp/       # Module: MCP server lifecycle, tool discovery
-  MyPalClara.Modules.Sandbox/   # Module: Docker/Incus code execution
-  MyPalClara.Modules.Proactive/ # Module: ORS assessment, proactive outreach
-  MyPalClara.Modules.Email/     # Module: Account polling, alerts
-  MyPalClara.Modules.Graph/     # Module: FalkorDB entity/relationship graph
-  MyPalClara.Modules.Games/     # Module: AI move decisions for games
-```
-
-### Key Separation
-
-- **Modules.Sdk** -- the contract. Modules reference only this (plus Data/Llm/Memory as needed). No reference to Api or Core.
-- **Gateway** -- the runtime. References Sdk + Core. Implements event bus, hooks, scheduler, module loader.
-- **Api** -- references Gateway. Wires everything in `Program.cs`.
-- **Modules.*** -- reference Sdk only. Build to DLL in `modules/` directory.
+### Clara.Gateway
+- Serilog.AspNetCore (9.x)
+- Docker.DotNet (3.x)
