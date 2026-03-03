@@ -4,6 +4,9 @@ using Clara.Core.Llm;
 using Clara.Core.Memory;
 using Clara.Core.Prompt;
 using Clara.Core.Sessions;
+using Clara.Core.Tools;
+using Clara.Core.Tools.BuiltIn;
+using Clara.Core.Tools.Mcp;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -43,6 +46,54 @@ public static class ServiceCollectionExtensions
         // Events
         services.AddSingleton<IClaraEventBus, ClaraEventBus>();
 
+        // MCP client infrastructure
+        services.AddSingleton<McpServerManager>();
+        services.AddSingleton<McpRegistryAdapter>();
+        services.AddSingleton<McpInstaller>();
+        services.AddSingleton<McpOAuthHandler>();
+
+        // Email service (stub — replaced by gateway module when configured)
+        services.AddSingleton<IEmailService, StubEmailService>();
+
         return services;
+    }
+
+    /// <summary>
+    /// Register all built-in tools into the tool registry.
+    /// Call this after building the service provider.
+    /// </summary>
+    public static void RegisterBuiltInTools(this IServiceProvider services)
+    {
+        var registry = services.GetRequiredService<IToolRegistry>();
+        var httpClient = new HttpClient();
+
+        // File tools
+        registry.Register(new FileReadTool());
+        registry.Register(new FileWriteTool());
+        registry.Register(new FileListTool());
+        registry.Register(new FileDeleteTool());
+
+        // GitHub tools
+        registry.Register(new GitHubListReposTool(httpClient));
+        registry.Register(new GitHubGetIssuesTool(httpClient));
+        registry.Register(new GitHubGetPullRequestsTool(httpClient));
+        registry.Register(new GitHubCreateIssueTool(httpClient));
+        registry.Register(new GitHubGetFileTool(httpClient));
+
+        // Azure DevOps tools
+        registry.Register(new AzDoListReposTool(httpClient));
+        registry.Register(new AzDoGetWorkItemsTool(httpClient));
+        registry.Register(new AzDoGetPipelinesTool(httpClient));
+
+        // Google Workspace tools
+        registry.Register(new GoogleListFilesTool(httpClient));
+        registry.Register(new GoogleReadSheetTool(httpClient));
+        registry.Register(new GoogleCreateDocTool(httpClient));
+
+        // Email tools
+        var emailService = services.GetRequiredService<IEmailService>();
+        registry.Register(new EmailCheckTool(emailService));
+        registry.Register(new EmailReadTool(emailService));
+        registry.Register(new EmailSendAlertTool(emailService));
     }
 }

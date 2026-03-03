@@ -123,6 +123,9 @@ using (var scope = app.Services.CreateScope())
     await db.Database.EnsureCreatedAsync();
 }
 
+// Register built-in tools
+app.Services.RegisterBuiltInTools();
+
 // Load hooks
 var hookRegistry = app.Services.GetRequiredService<HookRegistry>();
 var hooksPath = builder.Configuration.GetValue("Hooks:Directory", "hooks/hooks.yaml");
